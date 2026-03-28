@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EcoTrack Admin Login</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body>
+    <div class="auth-shell">
+      <div class="auth-panel">
+        <div class="auth-brand">
+          <h1><span class="logo-mark">ET</span> Eco<span>Track</span></h1>
+          <p>Administrator Access</p>
+        </div>
+
+        <form id="adminLoginForm" class="auth-form" autocomplete="off">
+          <label for="adminUsername">Username</label>
+          <input id="adminUsername" name="username" type="text" placeholder="Enter your username" required />
+
+          <label for="adminPassword">Password</label>
+          <input id="adminPassword" name="password" type="password" placeholder="Enter your password" required />
+
+          <div class="auth-row">
+            <label class="remember">
+              <input id="rememberMe" type="checkbox" />
+              <span>Remember me</span>
+            </label>
+            <a href="/" class="back-home">Back to Home</a>
+          </div>
+
+          <p id="authError" class="auth-error"></p>
+
+          <button id="loginButton" type="submit" class="login-button">Sign In</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="/admin/auth.js" defer></script>
+  </body>
+</html>
+

@@ -1,0 +1,26 @@
+{
+    "name":  "ecotrack-pateros",
+    "version":  "1.0.0",
+    "description":  "EcoTrack: A Cross Platform Waste Collection Monitoring System for Pateros City",
+    "private":  true,
+    "main":  "server.js",
+    "type":  "commonjs",
+    "scripts":  {
+                    "start":  "node server.js",
+                    "reset-data":  "node server.js --reset-data",
+                    "test":  "node --test",
+                    "waste:install":  "npm --prefix waste-monitoring-system/backend install --workspaces=false",
+                    "waste:install:backend":  "npm --prefix waste-monitoring-system/backend install --workspaces=false",
+                    "waste:install:mobile":  "npm --prefix waste-monitoring-system/mobile install --workspaces=false",
+                    "waste:start:backend":  "npm --prefix waste-monitoring-system/backend start",
+                    "waste:simulate:driver":  "npm --prefix waste-monitoring-system/backend run simulate",
+                    "waste:start:mobile":  "npm --prefix waste-monitoring-system/mobile start",
+                    "waste:start:all":  "start \"Waste Backend\" cmd /k npm run waste:start:backend \u0026\u0026 npm run waste:start:mobile",
+                    "waste:start:mobile:dev":  "npm --prefix waste-monitoring-system/mobile run start:dev-client",
+                    "waste:build:android:dev":  "npm --prefix waste-monitoring-system/mobile run build:android:development",
+                    "waste:build:ios:dev":  "npm --prefix waste-monitoring-system/mobile run build:ios:development"
+                },
+    "engines":  {
+                    "node":  "\u003e=18"
+                }
+}

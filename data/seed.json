@@ -1,0 +1,271 @@
+{
+  "city": {
+    "name": "Pateros City",
+    "region": "Metro Manila",
+    "focus": "Waste Collection Monitoring",
+    "operationsCenter": "Pateros Environmental Sanitation and Waste Management Office"
+  },
+  "schedule": [
+    {
+      "time": "05:00",
+      "label": "Fleet dispatch",
+      "detail": "All morning route trucks leave the motor pool for barangay coverage."
+    },
+    {
+      "time": "08:30",
+      "label": "Mid-shift checkpoint",
+      "detail": "Field supervisors verify route adherence, overflow risk, and crew safety."
+    },
+    {
+      "time": "12:00",
+      "label": "Transfer station unload",
+      "detail": "Completed loads are weighed before diversion sorting and disposal routing."
+    },
+    {
+      "time": "16:00",
+      "label": "Incident review",
+      "detail": "Open complaints, missed pickups, and blocked routes are triaged for the next sweep."
+    }
+  ],
+  "crews": [
+    {
+      "id": "CR-01",
+      "lead": "Michael Dela Cruz",
+      "members": 5,
+      "assignment": "North Loop",
+      "contact": "+63 917 510 2401",
+      "status": "Deployed"
+    },
+    {
+      "id": "CR-02",
+      "lead": "Rhea Santos",
+      "members": 4,
+      "assignment": "Riverside South",
+      "contact": "+63 917 510 2402",
+      "status": "Deployed"
+    },
+    {
+      "id": "CR-03",
+      "lead": "Eduardo Garcia",
+      "members": 4,
+      "assignment": "East Service",
+      "contact": "+63 917 510 2403",
+      "status": "Recovering"
+    },
+    {
+      "id": "CR-04",
+      "lead": "Leah Bautista",
+      "members": 3,
+      "assignment": "Quick Response",
+      "contact": "+63 917 510 2404",
+      "status": "Standby"
+    }
+  ],
+  "routes": [
+    {
+      "id": "RT-01",
+      "name": "North Loop",
+      "status": "On Schedule",
+      "truck": "Eco Hauler 01",
+      "plateNumber": "NCP 4187",
+      "driver": "Arnel Mendoza",
+      "crewLead": "Michael Dela Cruz",
+      "barangays": ["Aguho", "Poblacion", "Tabacalera"],
+      "scheduledStops": 42,
+      "completedStops": 31,
+      "progress": 74,
+      "tonnageCollected": 8.1,
+      "nextCheckpoint": "Poblacion market cluster",
+      "lastUpdated": "2026-03-10T08:36:00+08:00",
+      "notes": "Green bin pickup finished. Residual waste pass is underway."
+    },
+    {
+      "id": "RT-02",
+      "name": "Riverside South",
+      "status": "Delayed",
+      "truck": "Eco Hauler 02",
+      "plateNumber": "NCP 4192",
+      "driver": "Joel Tan",
+      "crewLead": "Rhea Santos",
+      "barangays": ["San Pedro", "San Roque", "Santa Ana"],
+      "scheduledStops": 38,
+      "completedStops": 19,
+      "progress": 50,
+      "tonnageCollected": 5.4,
+      "nextCheckpoint": "San Pedro creekside access road",
+      "lastUpdated": "2026-03-10T08:28:00+08:00",
+      "notes": "Heavy traffic near creek crossing slowed turnaround time."
+    },
+    {
+      "id": "RT-03",
+      "name": "East Service",
+      "status": "Recovering",
+      "truck": "Eco Hauler 03",
+      "plateNumber": "NCP 4201",
+      "driver": "Crispin Navarro",
+      "crewLead": "Eduardo Garcia",
+      "barangays": [
+        "Magtanggol",
+        "Martires del 96",
+        "Santo Rosario-Kanluran",
+        "Santo Rosario-Silangan"
+      ],
+      "scheduledStops": 46,
+      "completedStops": 29,
+      "progress": 63,
+      "tonnageCollected": 6.7,
+      "nextCheckpoint": "Santo Rosario riverside lane",
+      "lastUpdated": "2026-03-10T08:31:00+08:00",
+      "notes": "Recovered after a short transfer delay. Monitoring ETA closely."
+    }
+  ],
+  "barangays": [
+    {
+      "name": "Aguho",
+      "serviceDay": "Tuesday / Friday",
+      "completionRate": 88,
+      "diversionRate": 31,
+      "issuesOpen": 0,
+      "households": 1180,
+      "recyclablesTons": 1.3,
+      "lastPickup": "2026-03-10T07:42:00+08:00"
+    },
+    {
+      "name": "Magtanggol",
+      "serviceDay": "Monday / Thursday",
+      "completionRate": 72,
+      "diversionRate": 27,
+      "issuesOpen": 1,
+      "households": 1340,
+      "recyclablesTons": 1.0,
+      "lastPickup": "2026-03-10T08:03:00+08:00"
+    },
+    {
+      "name": "Martires del 96",
+      "serviceDay": "Monday / Thursday",
+      "completionRate": 69,
+      "diversionRate": 29,
+      "issuesOpen": 1,
+      "households": 1085,
+      "recyclablesTons": 0.9,
+      "lastPickup": "2026-03-10T07:55:00+08:00"
+    },
+    {
+      "name": "Poblacion",
+      "serviceDay": "Tuesday / Friday",
+      "completionRate": 85,
+      "diversionRate": 35,
+      "issuesOpen": 1,
+      "households": 1425,
+      "recyclablesTons": 1.6,
+      "lastPickup": "2026-03-10T08:12:00+08:00"
+    },
+    {
+      "name": "San Pedro",
+      "serviceDay": "Wednesday / Saturday",
+      "completionRate": 64,
+      "diversionRate": 26,
+      "issuesOpen": 2,
+      "households": 1370,
+      "recyclablesTons": 0.8,
+      "lastPickup": "2026-03-10T07:38:00+08:00"
+    },
+    {
+      "name": "San Roque",
+      "serviceDay": "Wednesday / Saturday",
+      "completionRate": 60,
+      "diversionRate": 24,
+      "issuesOpen": 1,
+      "households": 1295,
+      "recyclablesTons": 0.8,
+      "lastPickup": "2026-03-10T07:29:00+08:00"
+    },
+    {
+      "name": "Santa Ana",
+      "serviceDay": "Wednesday / Saturday",
+      "completionRate": 67,
+      "diversionRate": 30,
+      "issuesOpen": 0,
+      "households": 1260,
+      "recyclablesTons": 1.1,
+      "lastPickup": "2026-03-10T07:50:00+08:00"
+    },
+    {
+      "name": "Santo Rosario-Kanluran",
+      "serviceDay": "Monday / Thursday",
+      "completionRate": 71,
+      "diversionRate": 28,
+      "issuesOpen": 1,
+      "households": 1215,
+      "recyclablesTons": 1.0,
+      "lastPickup": "2026-03-10T08:07:00+08:00"
+    },
+    {
+      "name": "Santo Rosario-Silangan",
+      "serviceDay": "Monday / Thursday",
+      "completionRate": 70,
+      "diversionRate": 32,
+      "issuesOpen": 0,
+      "households": 1165,
+      "recyclablesTons": 1.1,
+      "lastPickup": "2026-03-10T08:05:00+08:00"
+    },
+    {
+      "name": "Tabacalera",
+      "serviceDay": "Tuesday / Friday",
+      "completionRate": 82,
+      "diversionRate": 34,
+      "issuesOpen": 0,
+      "households": 1105,
+      "recyclablesTons": 1.2,
+      "lastPickup": "2026-03-10T07:58:00+08:00"
+    }
+  ],
+  "issues": [
+    {
+      "id": "ISS-121",
+      "title": "Overflowing communal bin near market strip",
+      "barangay": "Poblacion",
+      "priority": "High",
+      "type": "Overflow Bin",
+      "notes": "Residual waste volume surged after morning market activity.",
+      "reporter": "Monitoring Desk",
+      "reportedAt": "2026-03-10T08:10:00+08:00",
+      "status": "Open"
+    },
+    {
+      "id": "ISS-122",
+      "title": "Missed pickup cluster on creekside lane",
+      "barangay": "San Pedro",
+      "priority": "High",
+      "type": "Missed Pickup",
+      "notes": "A narrow access lane was blocked by parked vehicles during pass one.",
+      "reporter": "Barangay Coordinator",
+      "reportedAt": "2026-03-10T08:04:00+08:00",
+      "status": "Open"
+    },
+    {
+      "id": "ISS-123",
+      "title": "Segregation contamination at curbside drop",
+      "barangay": "Magtanggol",
+      "priority": "Medium",
+      "type": "Segregation Issue",
+      "notes": "Black bags were mixed into the recyclables stream. Re-education suggested.",
+      "reporter": "Route Crew",
+      "reportedAt": "2026-03-10T07:41:00+08:00",
+      "status": "Open"
+    },
+    {
+      "id": "ISS-124",
+      "title": "Collection vehicle returned to route after tire check",
+      "barangay": "San Roque",
+      "priority": "Low",
+      "type": "Vehicle Check",
+      "notes": "No service interruption remains. Ticket may be closed.",
+      "reporter": "Motor Pool",
+      "reportedAt": "2026-03-10T06:52:00+08:00",
+      "status": "Resolved",
+      "resolvedAt": "2026-03-10T07:18:00+08:00"
+    }
+  ]
+}

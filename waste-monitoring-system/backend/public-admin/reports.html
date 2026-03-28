@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Reports</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body data-page="reports">
+    <div class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <h2><span class="logo-mark">ET</span> Eco<span>Track</span></h2>
+        </div>
+        <nav class="menu">
+          <a class="menu-item" data-page-link="dashboard" href="/admin/dashboard.html">Dashboard</a>
+          <a class="menu-item" data-page-link="schedule" href="/admin/schedule.html">Schedule Management</a>
+          <a class="menu-item" data-page-link="reports" href="/admin/reports.html">Issue Reports</a>
+          <a class="menu-item" data-page-link="drivers" href="/admin/drivers.html">Truck Drivers</a>
+          <a class="menu-item" data-page-link="analytics" href="/admin/analytics.html">Analytics</a>
+          <a class="menu-item" data-page-link="settings" href="/admin/settings.html">Settings</a>
+        </nav>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <h1>Issue Reports</h1>
+          <div class="topbar-right">
+            <label class="search-box">
+              <span>Search</span>
+              <input id="searchInput" type="search" placeholder="Search reports" />
+            </label>
+            <button id="logoutButton" class="logout-button" type="button">Log out</button>
+          </div>
+        </header>
+
+        <section class="section-block">
+          <article class="card panel panel-wide">
+            <div class="panel-heading">
+              <h2>Submitted Reports</h2>
+              <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Reference</th>
+                    <th>Issue Type</th>
+                    <th>Location</th>
+                    <th>Contact</th>
+                    <th>Picture</th>
+                    <th>Reported At</th>
+                  </tr>
+                </thead>
+                <tbody id="reportTableBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/admin/admin-pages.js" defer></script>
+  </body>
+</html>
+
+

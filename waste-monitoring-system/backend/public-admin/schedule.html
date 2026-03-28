@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Schedule</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body data-page="schedule">
+    <div class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <h2><span class="logo-mark">ET</span> Eco<span>Track</span></h2>
+        </div>
+        <nav class="menu">
+          <a class="menu-item" data-page-link="dashboard" href="/admin/dashboard.html">Dashboard</a>
+          <a class="menu-item" data-page-link="schedule" href="/admin/schedule.html">Schedule Management</a>
+          <a class="menu-item" data-page-link="reports" href="/admin/reports.html">Issue Reports</a>
+          <a class="menu-item" data-page-link="drivers" href="/admin/drivers.html">Truck Drivers</a>
+          <a class="menu-item" data-page-link="analytics" href="/admin/analytics.html">Analytics</a>
+          <a class="menu-item" data-page-link="settings" href="/admin/settings.html">Settings</a>
+        </nav>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <h1>Schedule Management</h1>
+          <div class="topbar-right">
+            <label class="search-box">
+              <span>Search</span>
+              <input id="searchInput" type="search" placeholder="Search day, zone, type" />
+            </label>
+            <button id="logoutButton" class="logout-button" type="button">Log out</button>
+          </div>
+        </header>
+
+        <section class="section-block">
+          <article class="card panel">
+            <div class="panel-heading">
+              <h2>Add or Edit Schedule</h2>
+              <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
+            </div>
+
+            <form id="scheduleForm" class="schedule-form" autocomplete="off">
+              <input type="hidden" id="scheduleEditingId" />
+
+              <label for="scheduleDay">Day</label>
+              <select id="scheduleDay" required>
+                <option value="">Select day</option>
+                <option>Monday</option>
+                <option>Tuesday</option>
+                <option>Wednesday</option>
+                <option>Thursday</option>
+                <option>Friday</option>
+                <option>Saturday</option>
+                <option>Sunday</option>
+              </select>
+
+              <label for="scheduleZone">Zone</label>
+              <input id="scheduleZone" type="text" placeholder="Zone or barangay" required />
+
+              <label for="scheduleTimeWindow">Time Window</label>
+              <input id="scheduleTimeWindow" type="text" placeholder="6:00 AM - 10:00 AM" required />
+
+              <label for="scheduleWasteType">Waste Type</label>
+              <input id="scheduleWasteType" type="text" placeholder="Biodegradable" required />
+
+              <label for="scheduleNotes">Notes</label>
+              <textarea id="scheduleNotes" rows="3" placeholder="Optional notes"></textarea>
+
+              <div class="schedule-form-actions">
+                <button id="scheduleSaveButton" type="submit" class="login-button">Save Schedule</button>
+                <button id="scheduleCancelButton" type="button" class="refresh-button">Cancel Edit</button>
+              </div>
+              <p id="scheduleMessage" class="auth-error"></p>
+            </form>
+          </article>
+
+          <article class="card panel">
+            <div class="panel-heading">
+              <h2>Weekly Collection Schedule</h2>
+            </div>
+            <div id="scheduleList" class="schedule-list"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/admin/admin-pages.js" defer></script>
+  </body>
+</html>
+

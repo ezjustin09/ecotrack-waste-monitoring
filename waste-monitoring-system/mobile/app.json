@@ -1,0 +1,63 @@
+{
+    "expo":  {
+                 "name":  "Waste Monitoring System",
+                 "slug":  "waste-monitoring-system",
+                 "scheme":  "wastemonitoring",
+                 "version":  "1.0.0",
+                 "orientation":  "portrait",
+                 "userInterfaceStyle":  "light",
+                 "splash":  {
+                                "resizeMode":  "contain",
+                                "backgroundColor":  "#f3f7f6"
+                            },
+                 "assetBundlePatterns":  [
+                                             "**/*"
+                                         ],
+                 "ios":  {
+                             "supportsTablet":  true,
+                             "bundleIdentifier":  "com.ecotrack.wastemonitoring",
+                             "config":  {
+                                            "googleMapsApiKey":  "AIzaSyCjH5L9CDeeDh7vHn7qxbgkO2-tZ2ZWH10"
+                                        }
+                         },
+                 "android":  {
+                                 "package":  "com.ecotrack.wastemonitoring",
+                                 "adaptiveIcon":  {
+                                                      "backgroundColor":  "#f3f7f6"
+                                                  },
+                                 "config":  {
+                                                "googleMaps":  {
+                                                                   "apiKey":  "AIzaSyBV80RAcfzjeA8pb3sbPRoynNTP2FeXfuM"
+                                                               }
+                                            }
+                             },
+                 "plugins":  [
+                                 [
+                                     "expo-dev-client",
+                                     {
+                                         "launchMode":  "most-recent"
+                                     }
+                                 ],
+                                 [
+                                     "expo-location",
+                                     {
+                                         "locationWhenInUsePermission":  "Allow Waste Monitoring System to access your location for reporting illegal dumping."
+                                     }
+                                 ],
+                                 [
+                                     "expo-image-picker",
+                                     {
+                                         "photosPermission":  "Allow Waste Monitoring System to access your photos so you can attach issue evidence.",
+                                         "cameraPermission":  "Allow Waste Monitoring System to access your camera so you can capture issue evidence."
+                                     }
+                                 ],
+                                 [
+                                     "expo-notifications",
+                                     {
+                                         "color":  "#0f766e"
+                                     }
+                                 ]
+                             ]
+             }
+}
+

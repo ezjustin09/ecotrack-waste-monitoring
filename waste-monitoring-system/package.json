@@ -1,0 +1,11 @@
+{
+    "name":  "waste-monitoring-system",
+    "private":  true,
+    "scripts":  {
+                    "install:backend":  "npm --prefix backend install --workspaces=false",
+                    "install:mobile":  "npm --prefix mobile install --workspaces=false",
+                    "start:backend":  "npm --prefix backend start",
+                    "simulate:driver":  "npm --prefix backend run simulate",
+                    "start:mobile":  "npm --prefix mobile start"
+                }
+}
