@@ -9,44 +9,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
-import { getTrucks } from "../services/api";
+import { usePreferences } from "../context/PreferencesContext";
+import { getAnnouncements, getNews, getTrucks } from "../services/api";
 import { createTruckSocket } from "../services/socket";
 
 const BLOCKED_TRUCK_IDS = new Set(["TRUCK-001"]);
-
-const ANNOUNCEMENTS = [
-  {
-    id: "ANN-001",
-    title: "Barangay Segregation Reminder",
-    details:
-      "Please separate biodegradable and non-biodegradable waste before pickup to avoid missed collection.",
-    postedAt: "March 27, 2026",
-  },
-  {
-    id: "ANN-002",
-    title: "Saturday Recovery Route",
-    details:
-      "A recovery truck will cover delayed streets this Saturday from 8:00 AM to 12:00 PM.",
-    postedAt: "March 26, 2026",
-  },
-];
-
-const NEWS_ITEMS = [
-  {
-    id: "NEWS-001",
-    title: "New GPS-Tracked Truck Added to Fleet",
-    details:
-      "The city added one additional GPS-enabled truck to improve route coverage in dense areas.",
-    postedAt: "March 25, 2026",
-  },
-  {
-    id: "NEWS-002",
-    title: "Illegal Dumping Reports Are Being Processed Faster",
-    details:
-      "Recent system updates helped response teams dispatch cleanup crews faster after citizen reports.",
-    postedAt: "March 24, 2026",
-  },
-];
 
 function filterVisibleTrucks(trucks) {
   return trucks.filter((truck) => !BLOCKED_TRUCK_IDS.has(truck.truckId));
@@ -73,9 +40,90 @@ function removeTruck(currentTrucks, truckId) {
   return currentTrucks.filter((truck) => truck.truckId !== truckId);
 }
 
+function formatFeedDate(value) {
+  if (!value) {
+    return "Just now";
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Just now";
+  }
+
+  return parsedDate.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function normalizeFeedItem(item) {
+  if (!item || !item.id) {
+    return null;
+  }
+
+  return {
+    id: String(item.id),
+    title: String(item.title || "Untitled"),
+    details: String(item.details || ""),
+    postedAt: formatFeedDate(item.createdAt || item.updatedAt || item.postedAt),
+  };
+}
+
+function normalizeFeedList(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.map(normalizeFeedItem).filter(Boolean);
+}
+
+function prependUniqueFeedItem(currentItems, incomingItem) {
+  const normalized = normalizeFeedItem(incomingItem);
+
+  if (!normalized) {
+    return currentItems;
+  }
+
+  const withoutOldValue = currentItems.filter((item) => item.id !== normalized.id);
+  return [normalized, ...withoutOldValue];
+}
+
+function updateFeedItem(currentItems, incomingItem) {
+  const normalized = normalizeFeedItem(incomingItem);
+
+  if (!normalized) {
+    return currentItems;
+  }
+
+  const nextItems = [...currentItems];
+  const existingIndex = nextItems.findIndex((item) => item.id === normalized.id);
+
+  if (existingIndex === -1) {
+    nextItems.unshift(normalized);
+    return nextItems;
+  }
+
+  nextItems[existingIndex] = normalized;
+  return nextItems;
+}
+
+function removeFeedItem(currentItems, itemId) {
+  const normalizedItemId = String(itemId || "").trim().toUpperCase();
+
+  if (!normalizedItemId) {
+    return currentItems;
+  }
+
+  return currentItems.filter((item) => String(item.id || "").trim().toUpperCase() !== normalizedItemId);
+}
+
 export default function HomeScreen() {
   const { token, signOut } = useAuth();
+  const { colors, isDarkMode } = usePreferences();
   const [trucks, setTrucks] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [newsItems, setNewsItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -99,14 +147,21 @@ export default function HomeScreen() {
     return false;
   }
 
-  async function loadActiveTrucks(isRefresh = false) {
+  async function loadHomeData(isRefresh = false) {
     if (isRefresh) {
       setRefreshing(true);
     }
 
     try {
-      const response = await getTrucks(token);
-      setTrucks(filterVisibleTrucks(response.trucks || []));
+      const [truckResponse, announcementsResponse, newsResponse] = await Promise.all([
+        getTrucks(token),
+        getAnnouncements(token),
+        getNews(token),
+      ]);
+
+      setTrucks(filterVisibleTrucks(truckResponse.trucks || []));
+      setAnnouncements(normalizeFeedList(announcementsResponse.announcements || []));
+      setNewsItems(normalizeFeedList(newsResponse.news || []));
       setErrorMessage("");
     } catch (error) {
       if (!handleAuthError(error.message)) {
@@ -119,7 +174,7 @@ export default function HomeScreen() {
   }
 
   useEffect(() => {
-    loadActiveTrucks();
+    loadHomeData();
 
     const socket = createTruckSocket();
 
@@ -146,21 +201,51 @@ export default function HomeScreen() {
       setErrorMessage("");
     });
 
+    socket.on("announcement:created", (announcement) => {
+      setAnnouncements((current) => prependUniqueFeedItem(current, announcement));
+      setErrorMessage("");
+    });
+
+    socket.on("news:created", (news) => {
+      setNewsItems((current) => prependUniqueFeedItem(current, news));
+      setErrorMessage("");
+    });
+
+    socket.on("announcement:updated", (announcement) => {
+      setAnnouncements((current) => updateFeedItem(current, announcement));
+      setErrorMessage("");
+    });
+
+    socket.on("announcement:deleted", ({ id }) => {
+      setAnnouncements((current) => removeFeedItem(current, id));
+      setErrorMessage("");
+    });
+
+    socket.on("news:updated", (news) => {
+      setNewsItems((current) => updateFeedItem(current, news));
+      setErrorMessage("");
+    });
+
+    socket.on("news:deleted", ({ id }) => {
+      setNewsItems((current) => removeFeedItem(current, id));
+      setErrorMessage("");
+    });
+
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [token]);
 
   return (
     <ScrollView
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { backgroundColor: colors.background }]}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={() => loadActiveTrucks(true)} tintColor="#0f766e" />
+        <RefreshControl refreshing={refreshing} onRefresh={() => loadHomeData(true)} tintColor="#0f766e" />
       }
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.metricRow}>
-        <View style={[styles.metricCard, styles.metricCardPrimary]}>
+        <View style={[styles.metricCard, styles.metricCardPrimary, { borderColor: colors.primary }]}>
           {loading ? (
             <ActivityIndicator color="#ffffff" size="small" style={styles.metricSpinner} />
           ) : (
@@ -168,45 +253,57 @@ export default function HomeScreen() {
           )}
           <Text style={styles.metricLabel}>Active trucks</Text>
         </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValueDark}>{fleetSummary.collecting}</Text>
-          <Text style={styles.metricLabelDark}>Collecting</Text>
+        <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+          <Text style={[styles.metricValueDark, { color: colors.text }]}>{fleetSummary.collecting}</Text>
+          <Text style={[styles.metricLabelDark, { color: colors.textSecondary }]}>Collecting</Text>
         </View>
-        <View style={[styles.metricCard, styles.metricCardLast]}>
-          <Text style={styles.metricValueDark}>{fleetSummary.onRoute}</Text>
-          <Text style={styles.metricLabelDark}>On route</Text>
+        <View style={[styles.metricCard, styles.metricCardLast, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+          <Text style={[styles.metricValueDark, { color: colors.text }]}>{fleetSummary.onRoute}</Text>
+          <Text style={[styles.metricLabelDark, { color: colors.textSecondary }]}>On route</Text>
         </View>
       </View>
 
       <View style={styles.metricRowSingle}>
-        <View style={styles.metricCardWide}>
-          <Ionicons name="pause-circle-outline" size={16} color="#64748b" />
-          <Text style={styles.metricWideText}>{fleetSummary.idle} truck(s) currently idle</Text>
+        <View style={[styles.metricCardWide, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+          <Ionicons name="pause-circle-outline" size={16} color={colors.textMuted} />
+          <Text style={[styles.metricWideText, { color: colors.textSecondary }]}>
+            {fleetSummary.idle} truck(s) currently idle
+          </Text>
         </View>
       </View>
 
-      {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
+      {errorMessage ? (
+        <Text style={[styles.errorBanner, { backgroundColor: colors.dangerSoft, color: colors.danger }]}>{errorMessage}</Text>
+      ) : null}
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Announcements</Text>
-        {ANNOUNCEMENTS.map((announcement) => (
-          <View key={announcement.id} style={styles.feedItem}>
-            <Text style={styles.feedTitle}>{announcement.title}</Text>
-            <Text style={styles.feedDetails}>{announcement.details}</Text>
-            <Text style={styles.feedMeta}>{announcement.postedAt}</Text>
+      <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Announcements</Text>
+        {announcements.map((announcement) => (
+          <View
+            key={announcement.id}
+            style={[styles.feedItem, { backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc", borderColor: colors.borderSoft }]}
+          >
+            <Text style={[styles.feedTitle, { color: colors.text }]}>{announcement.title}</Text>
+            <Text style={[styles.feedDetails, { color: colors.textSecondary }]}>{announcement.details}</Text>
+            <Text style={[styles.feedMeta, { color: colors.textMuted }]}>{announcement.postedAt}</Text>
           </View>
         ))}
+        {announcements.length === 0 ? <Text style={[styles.emptyFeedText, { color: colors.textMuted }]}>No announcements yet.</Text> : null}
       </View>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>News</Text>
-        {NEWS_ITEMS.map((newsItem) => (
-          <View key={newsItem.id} style={styles.feedItem}>
-            <Text style={styles.feedTitle}>{newsItem.title}</Text>
-            <Text style={styles.feedDetails}>{newsItem.details}</Text>
-            <Text style={styles.feedMeta}>{newsItem.postedAt}</Text>
+      <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>News</Text>
+        {newsItems.map((newsItem) => (
+          <View
+            key={newsItem.id}
+            style={[styles.feedItem, { backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc", borderColor: colors.borderSoft }]}
+          >
+            <Text style={[styles.feedTitle, { color: colors.text }]}>{newsItem.title}</Text>
+            <Text style={[styles.feedDetails, { color: colors.textSecondary }]}>{newsItem.details}</Text>
+            <Text style={[styles.feedMeta, { color: colors.textMuted }]}>{newsItem.postedAt}</Text>
           </View>
         ))}
+        {newsItems.length === 0 ? <Text style={[styles.emptyFeedText, { color: colors.textMuted }]}>No news yet.</Text> : null}
       </View>
     </ScrollView>
   );
@@ -333,5 +430,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#64748b",
     fontWeight: "600",
+  },
+  emptyFeedText: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: "600",
+    paddingVertical: 6,
   },
 });

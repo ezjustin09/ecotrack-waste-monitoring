@@ -1,0 +1,9 @@
+
+> backend@1.0.0 start
+> node server.js
+
+Connected to MongoDB at mongodb://127.0.0.1:27017 (db: waste_monitoring_system)
+Backend listening on http://localhost:4000
+Client connected: la9BFCGBjHDa5yjIAAAB
+Client disconnected: la9BFCGBjHDa5yjIAAAB
+Client connected: k4NE2fYBxcKsoxemAAAD

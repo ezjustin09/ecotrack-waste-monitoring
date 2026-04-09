@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
+import { usePreferences } from "../context/PreferencesContext";
 import { getCollectionSchedule } from "../services/api";
 
 const DAY_ORDER = {
@@ -59,6 +60,7 @@ function getWasteTypeTone(wasteType) {
 
 export default function ScheduleScreen() {
   const { token, signOut } = useAuth();
+  const { colors, isDarkMode } = usePreferences();
   const [schedule, setSchedule] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -100,37 +102,39 @@ export default function ScheduleScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { backgroundColor: colors.background }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => loadSchedule(true)} tintColor="#0f766e" />
       }
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.heroCard}>
-        <Text style={styles.kicker}>Collection Schedule</Text>
-        <Text style={styles.title}>Weekly Waste Pickup Plan</Text>
-        <Text style={styles.subtitle}>
+      <View style={[styles.heroCard, { backgroundColor: colors.card }]}>
+        <Text style={[styles.kicker, { color: colors.primary }]}>Collection Schedule</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Weekly Waste Pickup Plan</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Check your collection day and prepare your waste before pickup starts in your zone.
         </Text>
         <View style={styles.heroMetaRow}>
-          <Ionicons name="calendar-outline" size={16} color="#0f766e" />
-          <Text style={styles.heroMetaText}>{sortedSchedule.length} active schedule slots</Text>
+          <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+          <Text style={[styles.heroMetaText, { color: colors.primary }]}>{sortedSchedule.length} active schedule slots</Text>
         </View>
       </View>
 
       {loading ? (
         <View style={styles.loadingCard}>
           <ActivityIndicator size="small" color="#0f766e" />
-          <Text style={styles.loadingText}>Loading collection schedule...</Text>
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading collection schedule...</Text>
         </View>
       ) : null}
 
-      {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
+      {errorMessage ? (
+        <Text style={[styles.errorBanner, { backgroundColor: colors.dangerSoft, color: colors.danger }]}>{errorMessage}</Text>
+      ) : null}
 
       {!loading && !errorMessage && sortedSchedule.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Ionicons name="calendar-clear-outline" size={22} color="#64748b" />
-          <Text style={styles.emptyText}>No schedule found yet.</Text>
+        <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+          <Ionicons name="calendar-clear-outline" size={22} color={colors.textMuted} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No schedule found yet.</Text>
         </View>
       ) : null}
 
@@ -139,11 +143,14 @@ export default function ScheduleScreen() {
             const tone = getWasteTypeTone(entry.wasteType);
 
             return (
-              <View key={entry.id || `${entry.day}-${entry.zone}`} style={styles.scheduleCard}>
+              <View
+                key={entry.id || `${entry.day}-${entry.zone}`}
+                style={[styles.scheduleCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}
+              >
                 <View style={styles.cardHeaderRow}>
                   <View>
-                    <Text style={styles.dayText}>{entry.day}</Text>
-                    <Text style={styles.zoneText}>{entry.zone}</Text>
+                    <Text style={[styles.dayText, { color: colors.text }]}>{entry.day}</Text>
+                    <Text style={[styles.zoneText, { color: colors.textSecondary }]}>{entry.zone}</Text>
                   </View>
                   <View style={[styles.typePill, { backgroundColor: tone.backgroundColor }]}>
                     <Text style={[styles.typePillText, { color: tone.color }]}>{entry.wasteType}</Text>
@@ -151,13 +158,13 @@ export default function ScheduleScreen() {
                 </View>
 
                 <View style={styles.detailRow}>
-                  <Ionicons name="time-outline" size={15} color="#0f766e" />
-                  <Text style={styles.detailText}>{entry.timeWindow}</Text>
+                  <Ionicons name="time-outline" size={15} color={colors.primary} />
+                  <Text style={[styles.detailText, { color: colors.text }]}>{entry.timeWindow}</Text>
                 </View>
 
                 <View style={styles.detailRow}>
-                  <Ionicons name="information-circle-outline" size={15} color="#64748b" />
-                  <Text style={styles.noteText}>{entry.notes}</Text>
+                  <Ionicons name="information-circle-outline" size={15} color={colors.textMuted} />
+                  <Text style={[styles.noteText, { color: isDarkMode ? colors.textSecondary : "#475569" }]}>{entry.notes}</Text>
                 </View>
               </View>
             );

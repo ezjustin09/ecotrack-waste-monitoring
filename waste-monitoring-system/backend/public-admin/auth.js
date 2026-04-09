@@ -24,12 +24,23 @@ function bootstrapAuth() {
   const form = document.getElementById("adminLoginForm");
   const usernameInput = document.getElementById("adminUsername");
   const passwordInput = document.getElementById("adminPassword");
+  const togglePasswordButton = document.getElementById("toggleAdminPassword");
   const rememberMe = document.getElementById("rememberMe");
   const authError = document.getElementById("authError");
   const loginButton = document.getElementById("loginButton");
 
   if (!form) {
     return;
+  }
+
+  if (togglePasswordButton && passwordInput) {
+    togglePasswordButton.addEventListener("click", () => {
+      const isVisible = passwordInput.type === "text";
+      passwordInput.type = isVisible ? "password" : "text";
+      togglePasswordButton.setAttribute("aria-pressed", String(!isVisible));
+      togglePasswordButton.setAttribute("aria-label", isVisible ? "Show password" : "Hide password");
+      togglePasswordButton.classList.toggle("active", !isVisible);
+    });
   }
 
   if (getStoredToken()) {
@@ -79,3 +90,4 @@ function bootstrapAuth() {
 }
 
 bootstrapAuth();
+

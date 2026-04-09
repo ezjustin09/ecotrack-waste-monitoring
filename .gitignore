@@ -1,2 +1,8 @@
 node_modules/
 data/ecotrack-db.json
+.env
+.env.local
+.env.*.local
+**/.env
+waste-monitoring-system/mobile/google-services.json
+waste-monitoring-system/mobile/GoogleService-Info.plist

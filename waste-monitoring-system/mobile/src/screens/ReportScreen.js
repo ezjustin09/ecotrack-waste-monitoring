@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -75,6 +75,32 @@ function DropdownField({ label, value, placeholder, options, open, onToggle, onS
   );
 }
 
+function toDataUriFromBase64(base64Payload, mimeType = "image/jpeg") {
+  const normalizedBase64 = String(base64Payload || "").trim();
+  if (!normalizedBase64) {
+    return "";
+  }
+
+  const safeMimeType = String(mimeType || "image/jpeg").trim() || "image/jpeg";
+  return `data:${safeMimeType};base64,${normalizedBase64}`;
+}
+
+function readFileUriAsDataUri(fileUri) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+      const reader = new FileReader();
+
+      reader.onerror = () => reject(new Error("Unable to read the selected image."));
+      reader.onloadend = () => resolve(String(reader.result || ""));
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 export default function ReportScreen() {
   const { token, user, signOut } = useAuth();
   const cardOpacity = useRef(new Animated.Value(0)).current;
@@ -85,6 +111,7 @@ export default function ReportScreen() {
   const [issueType, setIssueType] = useState(ISSUE_TYPES[0]);
   const [contactNumber, setContactNumber] = useState("");
   const [pictureUri, setPictureUri] = useState("");
+  const [picturePreviewUri, setPicturePreviewUri] = useState("");
   const [selectedBarangay, setSelectedBarangay] = useState("");
   const [selectedStreet, setSelectedStreet] = useState("");
   const [isBarangayOpen, setIsBarangayOpen] = useState(false);
@@ -189,16 +216,37 @@ export default function ReportScreen() {
       }
 
       const result = await ImagePickerModule.launchImageLibraryAsync({
-        mediaTypes: ImagePickerModule.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         quality: 0.75,
+        base64: true,
       });
 
       if (result.canceled) {
         return;
       }
 
-      const selectedUri = result.assets?.[0]?.uri || "";
+      const selectedAsset = result.assets?.[0] || null;
+      const selectedUri = selectedAsset?.uri || "";
+      const selectedMimeType = selectedAsset?.mimeType || "image/jpeg";
+      const selectedBase64 = selectedAsset?.base64 || "";
+
+      setPicturePreviewUri(selectedUri);
+
+      if (selectedBase64) {
+        setPictureUri(toDataUriFromBase64(selectedBase64, selectedMimeType));
+        return;
+      }
+
+      if (selectedUri && !selectedUri.toLowerCase().startsWith("http")) {
+        const encodedUri = await readFileUriAsDataUri(selectedUri);
+
+        if (encodedUri) {
+          setPictureUri(encodedUri);
+          return;
+        }
+      }
+
       setPictureUri(selectedUri);
     } catch (error) {
       Alert.alert("Image error", error.message);
@@ -230,6 +278,17 @@ export default function ReportScreen() {
       return;
     }
 
+    const lowerPictureUri = trimmedPictureUri.toLowerCase();
+    if (
+      lowerPictureUri.startsWith("file://") ||
+      lowerPictureUri.startsWith("content://") ||
+      lowerPictureUri.startsWith("ph://") ||
+      lowerPictureUri.startsWith("assets-library://")
+    ) {
+      Alert.alert("Image upload issue", "Please pick the picture again so it can be uploaded properly.");
+      return;
+    }
+
     if (!trimmedBarangay || !trimmedStreet) {
       Alert.alert("Missing location", "Please select barangay and street.");
       return;
@@ -254,6 +313,7 @@ export default function ReportScreen() {
       setIssueType(ISSUE_TYPES[0]);
       setContactNumber("");
       setPictureUri("");
+      setPicturePreviewUri("");
       setSelectedBarangay("");
       setSelectedStreet("");
       setIsBarangayOpen(false);
@@ -335,7 +395,7 @@ export default function ReportScreen() {
 
         {pictureUri ? (
           <View style={styles.imagePreviewWrap}>
-            <Image source={{ uri: pictureUri }} style={styles.imagePreview} resizeMode="cover" />
+            <Image source={{ uri: picturePreviewUri || pictureUri }} style={styles.imagePreview} resizeMode="cover" />
           </View>
         ) : (
           <View style={styles.imagePlaceholder}>
@@ -610,3 +670,7 @@ const styles = StyleSheet.create({
     color: "#166534",
   },
 });
+
+
+
+

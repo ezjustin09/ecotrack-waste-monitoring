@@ -7,6 +7,13 @@ const state = {
   searchTerm: "",
   isLoading: false,
   drivers: [],
+  map: {
+    instance: null,
+    markers: new Map(),
+    hasFit: false,
+    userMoved: false,
+  },
+  reportPictureById: new Map(),
 };
 
 function getStoredToken() {
@@ -45,6 +52,79 @@ function truncate(text, max = 58) {
   }
 
   return normalized.length > max ? `${normalized.slice(0, max - 1)}...` : normalized;
+}
+function isOpenablePictureUri(pictureUri) {
+  const normalized = String(pictureUri || "").trim().toLowerCase();
+
+  return (
+    normalized.startsWith("http://") ||
+    normalized.startsWith("https://") ||
+    normalized.startsWith("data:image/")
+  );
+}
+
+function isLocalOnlyPictureUri(pictureUri) {
+  const normalized = String(pictureUri || "").trim().toLowerCase();
+
+  return (
+    normalized.startsWith("file://") ||
+    normalized.startsWith("content://") ||
+    normalized.startsWith("ph://") ||
+    normalized.startsWith("assets-library://")
+  );
+}
+
+function openPicturePreviewWindow(pictureUri, reportId = "") {
+  const previewWindow = window.open("about:blank", "_blank");
+
+  if (!previewWindow) {
+    window.alert("Popup blocked. Please allow popups to preview report pictures.");
+    return;
+  }
+
+  const doc = previewWindow.document;
+  const title = reportId ? `Report ${reportId} Picture` : "Report Picture";
+
+  doc.title = title;
+  doc.body.innerHTML = "";
+  doc.body.style.margin = "0";
+  doc.body.style.minHeight = "100vh";
+  doc.body.style.display = "flex";
+  doc.body.style.alignItems = "center";
+  doc.body.style.justifyContent = "center";
+  doc.body.style.background = "#0f172a";
+
+  const img = doc.createElement("img");
+  img.src = pictureUri;
+  img.alt = title;
+  img.style.maxWidth = "100vw";
+  img.style.maxHeight = "100vh";
+  img.style.objectFit = "contain";
+
+  doc.body.appendChild(img);
+}
+
+function renderPictureCell(reportId, pictureUri) {
+  const normalized = String(pictureUri || "").trim();
+
+  if (!normalized) {
+    return "-";
+  }
+
+  if (isLocalOnlyPictureUri(normalized)) {
+    return '<span class="picture-unavailable" title="This image points to a phone-local file path and cannot be opened in web.">Unavailable</span>';
+  }
+
+  if (!isOpenablePictureUri(normalized)) {
+    return '<span class="picture-unavailable">Invalid link</span>';
+  }
+
+  if (normalized.toLowerCase().startsWith("data:image/")) {
+    state.reportPictureById.set(String(reportId || ""), normalized);
+    return `<button type="button" class="picture-link picture-preview-btn" data-preview-report-id="${reportId}">Open</button>`;
+  }
+
+  return `<a class="picture-link" href="${normalized}" target="_blank" rel="noreferrer">Open</a>`;
 }
 
 function setMenuActive() {
@@ -135,17 +215,206 @@ function renderStatusBreakdown(statusMap = {}) {
   }
 }
 
+function getFilteredTrucks(trucks = []) {
+  return filterBySearch(trucks, [
+    (truck) => truck.truckId,
+    (truck) => truck.status,
+    (truck) => `${truck.latitude},${truck.longitude}`,
+  ]);
+}
+
+function getTruckStatusColor(status) {
+  const normalized = String(status || "").toLowerCase();
+
+  if (normalized.includes("collect")) {
+    return "#16a34a";
+  }
+
+  if (normalized.includes("route") || normalized.includes("transit") || normalized.includes("moving")) {
+    return "#2563eb";
+  }
+
+  if (normalized.includes("idle") || normalized.includes("wait")) {
+    return "#d97706";
+  }
+
+  if (normalized.includes("maint") || normalized.includes("offline")) {
+    return "#dc2626";
+  }
+
+  return "#0f766e";
+}
+
+function setMapStatusMessage(message, isError = false) {
+  const messageNode = document.getElementById("mapStatus");
+  if (!messageNode) {
+    return;
+  }
+
+  messageNode.textContent = message;
+  messageNode.classList.toggle("error", Boolean(isError && message));
+}
+
+function ensureLiveMap() {
+  const mapNode = document.getElementById("adminLiveMap");
+  if (!mapNode) {
+    return null;
+  }
+
+  if (state.map.instance) {
+    return state.map.instance;
+  }
+
+  if (!window.L) {
+    setMapStatusMessage("Map library unavailable. Check internet connection for map tiles.", true);
+    return null;
+  }
+
+  const initialCenter = [14.5586, 121.0684];
+  const map = window.L.map(mapNode, {
+    zoomControl: true,
+    preferCanvas: true,
+  }).setView(initialCenter, 13);
+
+  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
+
+  map.on("dragstart", () => {
+    state.map.userMoved = true;
+  });
+
+  map.on("zoomstart", () => {
+    state.map.userMoved = true;
+  });
+
+  state.map.instance = map;
+  window.setTimeout(() => map.invalidateSize(), 140);
+  return map;
+}
+
+function getValidTruckCoordinates(trucks = []) {
+  return trucks
+    .map((truck) => ({
+      ...truck,
+      latitude: Number(truck.latitude),
+      longitude: Number(truck.longitude),
+    }))
+    .filter((truck) => Number.isFinite(truck.latitude) && Number.isFinite(truck.longitude));
+}
+
+function fitMapToTrucks(trucks = [], forceReset = false) {
+  const map = ensureLiveMap();
+  if (!map) {
+    return;
+  }
+
+  const validTrucks = getValidTruckCoordinates(getFilteredTrucks(trucks));
+
+  if (!validTrucks.length) {
+    if (forceReset) {
+      map.setView([14.5586, 121.0684], 13);
+      state.map.hasFit = true;
+      state.map.userMoved = false;
+    }
+    return;
+  }
+
+  if (validTrucks.length === 1) {
+    map.setView([validTrucks[0].latitude, validTrucks[0].longitude], 15);
+  } else {
+    const bounds = window.L.latLngBounds(validTrucks.map((truck) => [truck.latitude, truck.longitude]));
+    map.fitBounds(bounds.pad(0.24), { maxZoom: 16 });
+  }
+
+  state.map.hasFit = true;
+  if (forceReset) {
+    state.map.userMoved = false;
+  }
+}
+
+function renderLiveMap(trucks = []) {
+  const summaryNode = document.getElementById("mapSummary");
+  const map = ensureLiveMap();
+  const filtered = getFilteredTrucks(trucks);
+  const validTrucks = getValidTruckCoordinates(filtered);
+
+  if (summaryNode) {
+    const suffix = validTrucks.length === 1 ? "" : "s";
+    summaryNode.textContent = `${validTrucks.length} visible truck${suffix}`;
+  }
+
+  if (!map) {
+    return;
+  }
+
+  const visibleIds = new Set();
+  for (const truck of validTrucks) {
+    visibleIds.add(truck.truckId);
+
+    const pinColor = getTruckStatusColor(truck.status);
+    const markerIcon = window.L.divIcon({
+      className: "admin-truck-marker",
+      html: `
+        <div class="truck-pin-shell" style="--truck-color: ${pinColor};">
+          <span class="truck-pin-glow"></span>
+          <img class="truck-pin-image" src="./truck-marker.png" alt="" />
+        </div>
+      `,
+      iconSize: [52, 72],
+      iconAnchor: [26, 66],
+      popupAnchor: [0, -58],
+    });
+
+    const popupHtml = `
+      <strong>${truck.truckId || "Unknown"}</strong><br/>
+      ${truck.status || "Unknown status"}<br/>
+      ${truck.latitude.toFixed(5)}, ${truck.longitude.toFixed(5)}<br/>
+      ${formatDateTime(truck.updatedAt)}
+    `;
+
+    const existingMarker = state.map.markers.get(truck.truckId);
+    if (existingMarker) {
+      existingMarker.setLatLng([truck.latitude, truck.longitude]);
+      existingMarker.setIcon(markerIcon);
+      existingMarker.bindPopup(popupHtml);
+    } else {
+      const marker = window.L.marker([truck.latitude, truck.longitude], {
+        icon: markerIcon,
+        title: truck.truckId,
+      }).addTo(map);
+      marker.bindPopup(popupHtml);
+      state.map.markers.set(truck.truckId, marker);
+    }
+  }
+
+  for (const [truckId, marker] of state.map.markers.entries()) {
+    if (!visibleIds.has(truckId)) {
+      map.removeLayer(marker);
+      state.map.markers.delete(truckId);
+    }
+  }
+
+  if (!validTrucks.length) {
+    setMapStatusMessage("No trucks with GPS coordinates available right now.");
+    return;
+  }
+
+  setMapStatusMessage(`Live map updated ${formatDateTime(new Date().toISOString())}`);
+
+  if (!state.map.hasFit || !state.map.userMoved) {
+    fitMapToTrucks(validTrucks, !state.map.hasFit);
+  }
+}
+
 function renderTrucks(trucks = []) {
   const tableBody = document.getElementById("truckTableBody");
   if (!tableBody) {
     return;
   }
 
-  const filtered = filterBySearch(trucks, [
-    (truck) => truck.truckId,
-    (truck) => truck.status,
-    (truck) => `${truck.latitude},${truck.longitude}`,
-  ]);
+  const filtered = getFilteredTrucks(trucks);
 
   if (!filtered.length) {
     tableBody.innerHTML = '<tr><td colspan="4" class="empty">No truck matches your search.</td></tr>';
@@ -183,6 +452,8 @@ function renderReports(reports = []) {
     (report) => report.contactNumber,
   ]);
 
+  state.reportPictureById.clear();
+
   if (!filtered.length) {
     tableBody.innerHTML = '<tr><td colspan="6" class="empty">No report matches your search.</td></tr>';
     return;
@@ -191,9 +462,7 @@ function renderReports(reports = []) {
   tableBody.innerHTML = filtered
     .slice(0, 60)
     .map((report) => {
-      const pictureCell = report.pictureUri
-        ? `<a class="picture-link" href="${report.pictureUri}" target="_blank" rel="noreferrer">Open</a>`
-        : "-";
+      const pictureCell = renderPictureCell(report.id, report.pictureUri);
 
       return `
         <tr>
@@ -255,6 +524,79 @@ function renderSchedule(schedule = []) {
 }
 
 
+function renderAnnouncements(announcements = []) {
+  const tableBody = document.getElementById("announcementTableBody");
+  if (!tableBody) {
+    return;
+  }
+
+  const filtered = filterBySearch(announcements, [
+    (item) => item.id,
+    (item) => item.title,
+    (item) => item.details,
+  ]);
+
+  if (!filtered.length) {
+    tableBody.innerHTML = '<tr><td colspan="5" class="empty">No announcement matches your search.</td></tr>';
+    return;
+  }
+
+  tableBody.innerHTML = filtered
+    .map(
+      (item) => `
+        <tr>
+          <td>${item.id}</td>
+          <td>${item.title}</td>
+          <td>${truncate(item.details, 80) || "-"}</td>
+          <td>${formatDateTime(item.createdAt)}</td>
+          <td>
+            <div class="table-actions">
+              <button type="button" class="schedule-edit-btn" data-announcement-action="edit" data-announcement-id="${item.id}">Edit</button>
+              <button type="button" class="schedule-delete-btn" data-announcement-action="delete" data-announcement-id="${item.id}">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `
+    )
+    .join("");
+}
+
+function renderNews(news = []) {
+  const tableBody = document.getElementById("newsTableBody");
+  if (!tableBody) {
+    return;
+  }
+
+  const filtered = filterBySearch(news, [
+    (item) => item.id,
+    (item) => item.title,
+    (item) => item.details,
+  ]);
+
+  if (!filtered.length) {
+    tableBody.innerHTML = '<tr><td colspan="5" class="empty">No news matches your search.</td></tr>';
+    return;
+  }
+
+  tableBody.innerHTML = filtered
+    .map(
+      (item) => `
+        <tr>
+          <td>${item.id}</td>
+          <td>${item.title}</td>
+          <td>${truncate(item.details, 80) || "-"}</td>
+          <td>${formatDateTime(item.createdAt)}</td>
+          <td>
+            <div class="table-actions">
+              <button type="button" class="schedule-edit-btn" data-news-action="edit" data-news-id="${item.id}">Edit</button>
+              <button type="button" class="schedule-delete-btn" data-news-action="delete" data-news-id="${item.id}">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `
+    )
+    .join("");
+}
 function renderDrivers(drivers = []) {
   const tableBody = document.getElementById("driverTableBody");
   if (!tableBody) {
@@ -384,7 +726,7 @@ function getScheduleById(scheduleId) {
   return schedules.find((item) => item.id === scheduleId) || null;
 }
 
-async function scheduleRequest(url, method, body = null) {
+async function adminRequest(url, method, body = null) {
   const options = {
     method,
     headers: getAuthHeaders(),
@@ -410,6 +752,9 @@ async function scheduleRequest(url, method, body = null) {
   return payload;
 }
 
+async function scheduleRequest(url, method, body = null) {
+  return adminRequest(url, method, body);
+}
 function setupScheduleManagement() {
   const scheduleForm = document.getElementById("scheduleForm");
   const cancelButton = document.getElementById("scheduleCancelButton");
@@ -512,6 +857,281 @@ function setupScheduleManagement() {
 }
 
 
+function setAnnouncementForm(announcement = null) {
+  const idInput = document.getElementById("announcementEditingId");
+  const titleInput = document.getElementById("announcementTitle");
+  const detailsInput = document.getElementById("announcementDetails");
+  const saveButton = document.getElementById("announcementSaveButton");
+
+  if (!idInput || !titleInput || !detailsInput) {
+    return;
+  }
+
+  if (!announcement) {
+    idInput.value = "";
+    titleInput.value = "";
+    detailsInput.value = "";
+    if (saveButton) {
+      saveButton.textContent = "Save Announcement";
+    }
+    return;
+  }
+
+  idInput.value = announcement.id || "";
+  titleInput.value = announcement.title || "";
+  detailsInput.value = announcement.details || "";
+  if (saveButton) {
+    saveButton.textContent = `Update ${announcement.id}`;
+  }
+}
+
+function showAnnouncementMessage(message, isError = false) {
+  const messageNode = document.getElementById("announcementMessage");
+  if (!messageNode) {
+    return;
+  }
+
+  messageNode.textContent = message;
+  messageNode.style.color = isError ? "#b91c1c" : "#166534";
+}
+
+function getAnnouncementById(id) {
+  const announcements = state.payload?.announcements || [];
+  return announcements.find((item) => item.id === id) || null;
+}
+
+function setupAnnouncementManagement() {
+  const form = document.getElementById("announcementForm");
+  const cancelButton = document.getElementById("announcementCancelButton");
+  const tableBody = document.getElementById("announcementTableBody");
+
+  if (!form || !tableBody) {
+    return;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const idInput = document.getElementById("announcementEditingId");
+    const titleInput = document.getElementById("announcementTitle");
+    const detailsInput = document.getElementById("announcementDetails");
+
+    const body = {
+      title: String(titleInput?.value || "").trim(),
+      details: String(detailsInput?.value || "").trim(),
+    };
+
+    if (!body.title || !body.details) {
+      showAnnouncementMessage("Please fill both title and details.", true);
+      return;
+    }
+
+    try {
+      const editingId = String(idInput?.value || "").trim();
+      if (editingId) {
+        await adminRequest(`/admin/announcements/${encodeURIComponent(editingId)}`, "PUT", body);
+        showAnnouncementMessage(`Announcement ${editingId} updated.`);
+      } else {
+        const created = await adminRequest("/admin/announcements", "POST", body);
+        showAnnouncementMessage(`Announcement ${created?.announcement?.id || ""} added.`);
+      }
+
+      setAnnouncementForm(null);
+      await fetchDashboard();
+    } catch (error) {
+      showAnnouncementMessage(error.message || "Unable to save announcement.", true);
+    }
+  });
+
+  if (cancelButton) {
+    cancelButton.addEventListener("click", () => {
+      setAnnouncementForm(null);
+      showAnnouncementMessage("");
+    });
+  }
+
+  tableBody.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const action = target.getAttribute("data-announcement-action");
+    const announcementId = String(target.getAttribute("data-announcement-id") || "").trim();
+
+    if (!action || !announcementId) {
+      return;
+    }
+
+    if (action === "edit") {
+      const announcement = getAnnouncementById(announcementId);
+      if (!announcement) {
+        showAnnouncementMessage("Announcement not found.", true);
+        return;
+      }
+
+      setAnnouncementForm(announcement);
+      showAnnouncementMessage(`Editing ${announcementId}.`);
+      return;
+    }
+
+    if (action === "delete") {
+      const confirmed = window.confirm(`Delete announcement ${announcementId}?`);
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await adminRequest(`/admin/announcements/${encodeURIComponent(announcementId)}`, "DELETE");
+        showAnnouncementMessage(`Announcement ${announcementId} deleted.`);
+        if (document.getElementById("announcementEditingId")?.value === announcementId) {
+          setAnnouncementForm(null);
+        }
+        await fetchDashboard();
+      } catch (error) {
+        showAnnouncementMessage(error.message || "Unable to delete announcement.", true);
+      }
+    }
+  });
+}
+
+function setNewsForm(newsItem = null) {
+  const idInput = document.getElementById("newsEditingId");
+  const titleInput = document.getElementById("newsTitle");
+  const detailsInput = document.getElementById("newsDetails");
+  const saveButton = document.getElementById("newsSaveButton");
+
+  if (!idInput || !titleInput || !detailsInput) {
+    return;
+  }
+
+  if (!newsItem) {
+    idInput.value = "";
+    titleInput.value = "";
+    detailsInput.value = "";
+    if (saveButton) {
+      saveButton.textContent = "Save News";
+    }
+    return;
+  }
+
+  idInput.value = newsItem.id || "";
+  titleInput.value = newsItem.title || "";
+  detailsInput.value = newsItem.details || "";
+  if (saveButton) {
+    saveButton.textContent = `Update ${newsItem.id}`;
+  }
+}
+
+function showNewsMessage(message, isError = false) {
+  const messageNode = document.getElementById("newsMessage");
+  if (!messageNode) {
+    return;
+  }
+
+  messageNode.textContent = message;
+  messageNode.style.color = isError ? "#b91c1c" : "#166534";
+}
+
+function getNewsById(id) {
+  const news = state.payload?.news || [];
+  return news.find((item) => item.id === id) || null;
+}
+
+function setupNewsManagement() {
+  const form = document.getElementById("newsForm");
+  const cancelButton = document.getElementById("newsCancelButton");
+  const tableBody = document.getElementById("newsTableBody");
+
+  if (!form || !tableBody) {
+    return;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const idInput = document.getElementById("newsEditingId");
+    const titleInput = document.getElementById("newsTitle");
+    const detailsInput = document.getElementById("newsDetails");
+
+    const body = {
+      title: String(titleInput?.value || "").trim(),
+      details: String(detailsInput?.value || "").trim(),
+    };
+
+    if (!body.title || !body.details) {
+      showNewsMessage("Please fill both title and details.", true);
+      return;
+    }
+
+    try {
+      const editingId = String(idInput?.value || "").trim();
+      if (editingId) {
+        await adminRequest(`/admin/news/${encodeURIComponent(editingId)}`, "PUT", body);
+        showNewsMessage(`News ${editingId} updated.`);
+      } else {
+        const created = await adminRequest("/admin/news", "POST", body);
+        showNewsMessage(`News ${created?.news?.id || ""} added.`);
+      }
+
+      setNewsForm(null);
+      await fetchDashboard();
+    } catch (error) {
+      showNewsMessage(error.message || "Unable to save news.", true);
+    }
+  });
+
+  if (cancelButton) {
+    cancelButton.addEventListener("click", () => {
+      setNewsForm(null);
+      showNewsMessage("");
+    });
+  }
+
+  tableBody.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const action = target.getAttribute("data-news-action");
+    const newsId = String(target.getAttribute("data-news-id") || "").trim();
+
+    if (!action || !newsId) {
+      return;
+    }
+
+    if (action === "edit") {
+      const newsItem = getNewsById(newsId);
+      if (!newsItem) {
+        showNewsMessage("News item not found.", true);
+        return;
+      }
+
+      setNewsForm(newsItem);
+      showNewsMessage(`Editing ${newsId}.`);
+      return;
+    }
+
+    if (action === "delete") {
+      const confirmed = window.confirm(`Delete news ${newsId}?`);
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await adminRequest(`/admin/news/${encodeURIComponent(newsId)}`, "DELETE");
+        showNewsMessage(`News ${newsId} deleted.`);
+        if (document.getElementById("newsEditingId")?.value === newsId) {
+          setNewsForm(null);
+        }
+        await fetchDashboard();
+      } catch (error) {
+        showNewsMessage(error.message || "Unable to delete news.", true);
+      }
+    }
+  });
+}
 function setDriverForm(driver = null) {
   const idInput = document.getElementById("driverEditingId");
   const nameInput = document.getElementById("driverName");
@@ -561,31 +1181,8 @@ function getDriverById(driverId) {
 }
 
 async function driverRequest(url, method, body = null) {
-  const options = {
-    method,
-    headers: getAuthHeaders(),
-  };
-
-  if (body) {
-    options.body = JSON.stringify(body);
-  }
-
-  const response = await fetch(url, options);
-
-  if (response.status === 401) {
-    clearStoredToken();
-    window.location.replace("/admin");
-    throw new Error("Session expired");
-  }
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || "Request failed");
-  }
-
-  return payload;
+  return adminRequest(url, method, body);
 }
-
 async function fetchDrivers() {
   if (!state.token) {
     return;
@@ -740,16 +1337,18 @@ async function renderBackendInfo() {
 }
 
 function applyPayload(payload) {
-  state.payload = payload;
+  state.payload = payload || {};
 
-  renderStats(payload);
-  renderStatusBreakdown(payload?.stats?.byStatus || {});
-  renderTrucks(payload?.trucks || []);
-  renderReports(payload?.reports || []);
-  renderSchedule(payload?.schedule || []);
-  renderRecentActivity(payload?.reports || [], payload?.trucks || []);
+  renderStats(state.payload);
+  renderStatusBreakdown(state.payload?.stats?.byStatus || {});
+  renderLiveMap(state.payload?.trucks || []);
+  renderTrucks(state.payload?.trucks || []);
+  renderReports(state.payload?.reports || []);
+  renderSchedule(state.payload?.schedule || []);
+  renderAnnouncements(state.payload?.announcements || []);
+  renderNews(state.payload?.news || []);
+  renderRecentActivity(state.payload?.reports || [], state.payload?.trucks || []);
 }
-
 async function fetchDashboard() {
   if (!state.token || state.isLoading) {
     return;
@@ -828,6 +1427,36 @@ function setupRealtime() {
   socket.on("report:created", refresh);
 }
 
+function setupReportPicturePreview() {
+  const tableBody = document.getElementById("reportTableBody");
+  if (!tableBody || tableBody.dataset.previewBound === "1") {
+    return;
+  }
+
+  tableBody.dataset.previewBound = "1";
+
+  tableBody.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const trigger = target.closest("[data-preview-report-id]");
+    if (!trigger) {
+      return;
+    }
+
+    const reportId = String(trigger.getAttribute("data-preview-report-id") || "").trim();
+    const pictureUri = state.reportPictureById.get(reportId) || "";
+
+    if (!pictureUri) {
+      window.alert("Picture is unavailable for this report.");
+      return;
+    }
+
+    openPicturePreviewWindow(pictureUri, reportId);
+  });
+}
 function setupSearch() {
   const searchInput = document.getElementById("searchInput");
   if (!searchInput) {
@@ -838,15 +1467,17 @@ function setupSearch() {
     state.searchTerm = String(event.target.value || "").trim();
 
     if (state.payload) {
+      renderLiveMap(state.payload.trucks || []);
       renderTrucks(state.payload.trucks || []);
       renderReports(state.payload.reports || []);
       renderSchedule(state.payload.schedule || []);
+      renderAnnouncements(state.payload.announcements || []);
+      renderNews(state.payload.news || []);
     }
 
     renderDrivers(state.drivers || []);
   });
 }
-
 function bootstrap() {
   state.token = getStoredToken();
 
@@ -867,8 +1498,19 @@ function bootstrap() {
     refreshButton.addEventListener("click", () => fetchDashboard());
   }
 
+  const mapFitButton = document.getElementById("mapFitButton");
+  if (mapFitButton) {
+    mapFitButton.addEventListener("click", () => {
+      fitMapToTrucks(state.payload?.trucks || [], true);
+      renderLiveMap(state.payload?.trucks || []);
+    });
+  }
+
+  setupReportPicturePreview();
   setupSearch();
   setupScheduleManagement();
+  setupAnnouncementManagement();
+  setupNewsManagement();
   setupDriverManagement();
   setupRealtime();
   fetchDashboard();
@@ -876,6 +1518,16 @@ function bootstrap() {
 }
 
 bootstrap();
+
+
+
+
+
+
+
+
+
+
 
 
 

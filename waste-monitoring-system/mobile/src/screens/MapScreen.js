@@ -1,13 +1,14 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  Platform,
+  PanResponder,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  Platform,
   View,
 } from "react-native";
 import * as Location from "expo-location";
@@ -16,6 +17,7 @@ import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import TruckMarker from "../components/TruckMarker";
 import { useAuth } from "../context/AuthContext";
+import { usePreferences } from "../context/PreferencesContext";
 import { getTrucks } from "../services/api";
 import {
   ALERT_RADIUS_METERS,
@@ -126,10 +128,12 @@ function describeAlertAccess(alertAccess, alertsEnabled) {
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { token, user, signOut } = useAuth();
+  const { feedNotificationsEnabled, setFeedNotificationsEnabled } = usePreferences();
   const mapRef = useRef(null);
   const fittedOnceRef = useRef(false);
   const nearbyTruckIdsRef = useRef(new Set());
   const sheetTranslateY = useRef(new Animated.Value(0)).current;
+  const dragStartOffsetRef = useRef(0);
   const [trucks, setTrucks] = useState([]);
   const [selectedTruckId, setSelectedTruckId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -138,8 +142,8 @@ export default function MapScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [userLocation, setUserLocation] = useState(null);
   const [isSheetCollapsed, setIsSheetCollapsed] = useState(false);
-  const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [alertAccess, setAlertAccess] = useState("checking");
+  const alertsEnabled = feedNotificationsEnabled && alertAccess === "granted";
 
   const region = useMemo(() => buildMapRegion(trucks, userLocation), [trucks, userLocation]);
   const selectedTruck = useMemo(
@@ -155,6 +159,7 @@ export default function MapScreen() {
     }),
     [trucks]
   );
+  const mapStyle = useMemo(() => (Platform.OS === "android" ? undefined : MAP_STYLE), []);
   const nearbyTruckCount = useMemo(() => {
     if (!userLocation) {
       return 0;
@@ -162,6 +167,51 @@ export default function MapScreen() {
 
     return trucks.filter((truck) => getDistanceMeters(userLocation, truck) <= ALERT_RADIUS_METERS).length;
   }, [trucks, userLocation]);
+  const sheetPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
+        onPanResponderGrant: () => {
+          sheetTranslateY.stopAnimation((value) => {
+            dragStartOffsetRef.current = value;
+          });
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const nextOffset = Math.min(
+            Math.max(dragStartOffsetRef.current + gestureState.dy, 0),
+            SHEET_COLLAPSED_OFFSET
+          );
+          sheetTranslateY.setValue(nextOffset);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const projectedOffset = dragStartOffsetRef.current + gestureState.dy;
+          const shouldCollapse =
+            gestureState.vy > 0.55 || projectedOffset > SHEET_COLLAPSED_OFFSET * 0.45;
+
+          setIsSheetCollapsed(shouldCollapse);
+          Animated.spring(sheetTranslateY, {
+            toValue: shouldCollapse ? SHEET_COLLAPSED_OFFSET : 0,
+            useNativeDriver: true,
+            friction: 10,
+            tension: 70,
+          }).start();
+        },
+        onPanResponderTerminate: (_, gestureState) => {
+          const projectedOffset = dragStartOffsetRef.current + gestureState.dy;
+          const shouldCollapse =
+            gestureState.vy > 0.55 || projectedOffset > SHEET_COLLAPSED_OFFSET * 0.45;
+
+          setIsSheetCollapsed(shouldCollapse);
+          Animated.spring(sheetTranslateY, {
+            toValue: shouldCollapse ? SHEET_COLLAPSED_OFFSET : 0,
+            useNativeDriver: true,
+            friction: 10,
+            tension: 70,
+          }).start();
+        },
+      }),
+    [sheetTranslateY]
+  );
   const closestTruckSummary = useMemo(() => {
     if (!userLocation || trucks.length === 0) {
       return null;
@@ -180,17 +230,6 @@ export default function MapScreen() {
       return closest;
     }, null);
   }, [trucks, userLocation]);
-
-  function setSheetCollapsed(nextCollapsed) {
-    setIsSheetCollapsed(nextCollapsed);
-    Animated.spring(sheetTranslateY, {
-      toValue: nextCollapsed ? SHEET_COLLAPSED_OFFSET : 0,
-      useNativeDriver: true,
-      friction: 10,
-      tension: 70,
-    }).start();
-  }
-
   function handleAuthError(message) {
     if (message === "Authentication required" || message === "Invalid or expired session") {
       signOut();
@@ -214,7 +253,7 @@ export default function MapScreen() {
       edgePadding: {
         top: 180,
         right: 80,
-        bottom: isSheetCollapsed ? 120 : 320,
+        bottom: isSheetCollapsed ? 130 : 320,
         left: 80,
       },
       animated: true,
@@ -312,11 +351,9 @@ export default function MapScreen() {
     try {
       const access = await getNearbyTruckAlertsStatusAsync();
       setAlertAccess(access.granted ? "granted" : access.status === "unsupported" ? "unsupported" : access.canAskAgain ? "denied" : "blocked");
-      setAlertsEnabled(access.granted);
     } catch (error) {
       console.log("Unable to read notification permissions:", error.message);
       setAlertAccess("error");
-      setAlertsEnabled(false);
     }
   }
 
@@ -324,18 +361,18 @@ export default function MapScreen() {
     if (alertsEnabled) {
       nearbyTruckIdsRef.current.clear();
       clearNearbyTruckNotificationsAsync().catch(() => {});
-      setAlertsEnabled(false);
+      setFeedNotificationsEnabled(false).catch(() => {});
       return;
     }
 
     try {
       const access = await enableNearbyTruckAlertsAsync();
       setAlertAccess(access.granted ? "granted" : access.status === "unsupported" ? "unsupported" : access.canAskAgain ? "denied" : "blocked");
-      setAlertsEnabled(access.granted);
+      await setFeedNotificationsEnabled(access.granted);
     } catch (error) {
       console.log("Unable to enable nearby alerts:", error.message);
       setAlertAccess("error");
-      setAlertsEnabled(false);
+      setFeedNotificationsEnabled(false).catch(() => {});
     }
   }
 
@@ -467,11 +504,10 @@ export default function MapScreen() {
     <View style={styles.container}>
       <MapView
         ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={region}
-        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
-        googleRenderer={Platform.OS === "android" ? "LEGACY" : undefined}
-        customMapStyle={MAP_STYLE}
+        customMapStyle={mapStyle}
         showsUserLocation
         showsMyLocationButton={false}
         toolbarEnabled={false}
@@ -519,13 +555,13 @@ export default function MapScreen() {
           },
         ]}
       >
-        <View style={styles.sheetGrabArea}>
+        <View style={styles.sheetGrabArea} {...sheetPanResponder.panHandlers}>
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeaderRow}>
             <View>
               <Text style={styles.sheetTitle}>Garbage Truck Activity</Text>
               <Text style={styles.sheetSubtitle}>
-                {isSheetCollapsed ? "Tap expand to reopen the fleet list." : "Tap hide to collapse the fleet list."}
+                {isSheetCollapsed ? "Swipe up to reopen the fleet list." : "Swipe down to minimize the fleet list."}
               </Text>
             </View>
             <View style={styles.sheetHeaderActions}>
@@ -535,66 +571,59 @@ export default function MapScreen() {
                   <Text style={[styles.selectedStatusText, { color: selectedStatusMeta.color }]}>{selectedTruck.status}</Text>
                 </View>
               ) : null}
-              <Pressable style={styles.collapseButton} onPress={() => setSheetCollapsed(!isSheetCollapsed)}>
-                <Ionicons
-                  name={isSheetCollapsed ? "chevron-up-outline" : "chevron-down-outline"}
-                  size={18}
-                  color="#0f172a"
-                />
-              </Pressable>
             </View>
           </View>
         </View>
 
+        {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
+        {!errorMessage && trucks.length === 0 ? (
+          <Text style={styles.emptyBanner}>No active trucks yet. Ask a driver to start Live GPS Sharing.</Text>
+        ) : null}
+
         {!isSheetCollapsed ? (
-          <>
+          <ScrollView
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => loadTrucks(true)} tintColor="#0f766e" />
+            }
+            showsVerticalScrollIndicator={false}
+          >
+            {trucks.map((truck) => {
+              const statusMeta = getTruckStatusMeta(truck.status);
+              const selected = truck.truckId === selectedTruckId;
 
-            {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
-
-            <ScrollView
-              contentContainerStyle={styles.listContent}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={() => loadTrucks(true)} tintColor="#0f766e" />
-              }
-              showsVerticalScrollIndicator={false}
-            >
-              {trucks.map((truck) => {
-                const statusMeta = getTruckStatusMeta(truck.status);
-                const selected = truck.truckId === selectedTruckId;
-
-                return (
-                  <Pressable
-                    key={truck.truckId}
-                    style={[styles.truckRow, selected && styles.truckRowSelected]}
-                    onPress={() => focusTruck(truck)}
-                  >
-                    <View style={styles.truckRowLeft}>
-                      <View style={[styles.rowIconShell, { backgroundColor: statusMeta.soft }]}>
-                        <MaterialCommunityIcons name="truck-fast-outline" size={18} color={statusMeta.color} />
-                      </View>
-                      <View>
-                        <Text style={styles.truckId}>{truck.truckId}</Text>
-                        <Text style={styles.coordinates}>
-                          {truck.latitude.toFixed(4)}, {truck.longitude.toFixed(4)}
-                        </Text>
-                      </View>
+              return (
+                <Pressable
+                  key={truck.truckId}
+                  style={[styles.truckRow, selected && styles.truckRowSelected]}
+                  onPress={() => focusTruck(truck)}
+                >
+                  <View style={styles.truckRowLeft}>
+                    <View style={[styles.rowIconShell, { backgroundColor: statusMeta.soft }]}>
+                      <MaterialCommunityIcons name="truck-fast-outline" size={18} color={statusMeta.color} />
                     </View>
-
-                    <View style={styles.truckRowRight}>
-                      <View style={[styles.statusTag, { backgroundColor: statusMeta.soft }]}>
-                        <Text style={[styles.statusTagText, { color: statusMeta.color }]}>{truck.status}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                    <View>
+                      <Text style={styles.truckId}>{truck.truckId}</Text>
+                      <Text style={styles.coordinates}>
+                        {truck.latitude.toFixed(4)}, {truck.longitude.toFixed(4)}
+                      </Text>
                     </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </>
+                  </View>
+
+                  <View style={styles.truckRowRight}>
+                    <View style={[styles.statusTag, { backgroundColor: statusMeta.soft }]}>
+                      <Text style={[styles.statusTagText, { color: statusMeta.color }]}>{truck.status}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         ) : (
           <View style={styles.collapsedSummary}>
             <Text style={styles.collapsedSummaryText}>{fleetCounts.total} trucks live</Text>
-            <Text style={styles.collapsedSummaryMeta}>Tap expand to view the full activity list again.</Text>
+            <Text style={styles.collapsedSummaryMeta}>Swipe up on the handle to reopen the fleet list.</Text>
           </View>
         )}
       </Animated.View>
@@ -901,6 +930,14 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
     fontSize: 13,
   },
+  emptyBanner: {
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#ecfeff",
+    color: "#0f766e",
+    fontSize: 13,
+  },
   listContent: {
     paddingBottom: 8,
   },
@@ -970,4 +1007,13 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
 });
+
+
+
+
+
+
+
+
+
 

@@ -1,0 +1,89 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Announcements</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body data-page="announcements">
+    <div class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <h2><span class="logo-mark">ET</span> Eco<span>Track</span></h2>
+        </div>
+        <nav class="menu">
+          <a class="menu-item" data-page-link="dashboard" href="/admin/dashboard.html">Dashboard</a>
+          <a class="menu-item" data-page-link="schedule" href="/admin/schedule.html">Schedule Management</a>
+          <a class="menu-item" data-page-link="reports" href="/admin/reports.html">Issue Reports</a>
+          <a class="menu-item" data-page-link="drivers" href="/admin/drivers.html">Truck Drivers</a>
+          <a class="menu-item" data-page-link="announcements" href="/admin/announcements.html">Announcements</a>
+          <a class="menu-item" data-page-link="news" href="/admin/news.html">News</a>
+          <a class="menu-item" data-page-link="analytics" href="/admin/analytics.html">Analytics</a>
+          <a class="menu-item" data-page-link="settings" href="/admin/settings.html">Settings</a>
+        </nav>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <h1>Announcement Management</h1>
+          <div class="topbar-right">
+            <label class="search-box">
+              <span>Search</span>
+              <input id="searchInput" type="search" placeholder="Search announcements" />
+            </label>
+            <button id="logoutButton" class="logout-button" type="button">Log out</button>
+          </div>
+        </header>
+
+        <section class="section-block">
+          <article class="card panel">
+            <div class="panel-heading">
+              <h2>Add or Edit Announcement</h2>
+              <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
+            </div>
+
+            <form id="announcementForm" class="schedule-form" autocomplete="off">
+              <input type="hidden" id="announcementEditingId" />
+
+              <label for="announcementTitle">Title</label>
+              <input id="announcementTitle" type="text" placeholder="Announcement title" required />
+
+              <label for="announcementDetails">Details</label>
+              <textarea id="announcementDetails" rows="3" placeholder="Announcement details" required></textarea>
+
+              <div class="schedule-form-actions">
+                <button id="announcementSaveButton" type="submit" class="login-button">Save Announcement</button>
+                <button id="announcementCancelButton" type="button" class="refresh-button">Cancel Edit</button>
+              </div>
+              <p id="announcementMessage" class="auth-error"></p>
+            </form>
+          </article>
+
+          <article class="card panel panel-wide">
+            <div class="panel-heading">
+              <h2>Announcements</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Details</th>
+                    <th>Posted</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="announcementTableBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/admin/admin-pages.js" defer></script>
+  </body>
+</html>

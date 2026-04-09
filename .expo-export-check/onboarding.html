@@ -1,0 +1,43 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EcoTrack Onboarding</title>
+  <link rel="stylesheet" href="/onboarding.css" />
+  <script src="/onboarding.js" defer></script>
+</head>
+<body>
+  <main class="onboarding" aria-label="EcoTrack onboarding">
+    <header class="onboarding__header">
+      <p class="onboarding__eyebrow">EcoTrack Guide</p>
+      <button id="skipButton" class="button button--ghost" type="button">Skip</button>
+    </header>
+
+    <section class="onboarding__card" aria-live="polite">
+      <div class="video-shell">
+        <video id="onboardingVideo" class="onboarding-video" playsinline muted loop preload="metadata"></video>
+      </div>
+
+      <div class="content-shell">
+        <p id="slideBadge" class="slide-badge"></p>
+        <h1 id="slideTitle" class="slide-title"></h1>
+        <p id="slideDescription" class="slide-description"></p>
+      </div>
+
+      <div class="progress-shell">
+        <p id="slideCounter" class="slide-counter"></p>
+        <div id="slideDots" class="slide-dots" role="tablist" aria-label="Onboarding steps"></div>
+      </div>
+
+      <p id="completionMessage" class="completion-message" hidden></p>
+    </section>
+
+    <footer class="onboarding__footer">
+      <button id="backButton" class="button button--ghost" type="button">Back</button>
+      <button id="nextButton" class="button button--primary" type="button">Next</button>
+      <button id="finishButton" class="button button--primary" type="button" hidden>Finish</button>
+    </footer>
+  </main>
+</body>
+</html>

@@ -6,6 +6,12 @@
                     "install:mobile":  "npm --prefix mobile install --workspaces=false",
                     "start:backend":  "npm --prefix backend start",
                     "simulate:driver":  "npm --prefix backend run simulate",
-                    "start:mobile":  "npm --prefix mobile start"
+                    "start:mobile":  "npm --prefix mobile start",
+                    "start:all":  "start \"Waste Backend\" cmd /k npm run start:backend \u0026\u0026 start \"Waste Mobile\" cmd /k npm run start:mobile",
+                    "build:android:preview":  "npm --prefix mobile run build:android:preview",
+                    "build:ios:preview":  "npm --prefix mobile run build:ios:preview",
+                    "build:android:production":  "npm --prefix mobile run build:android:production",
+                    "build:ios:production":  "npm --prefix mobile run build:ios:production",
+                    "deploy:check":  "node scripts/deploy-preflight.js"
                 }
 }

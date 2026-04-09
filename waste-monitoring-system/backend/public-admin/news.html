@@ -1,0 +1,89 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin News</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body data-page="news">
+    <div class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <h2><span class="logo-mark">ET</span> Eco<span>Track</span></h2>
+        </div>
+        <nav class="menu">
+          <a class="menu-item" data-page-link="dashboard" href="/admin/dashboard.html">Dashboard</a>
+          <a class="menu-item" data-page-link="schedule" href="/admin/schedule.html">Schedule Management</a>
+          <a class="menu-item" data-page-link="reports" href="/admin/reports.html">Issue Reports</a>
+          <a class="menu-item" data-page-link="drivers" href="/admin/drivers.html">Truck Drivers</a>
+          <a class="menu-item" data-page-link="announcements" href="/admin/announcements.html">Announcements</a>
+          <a class="menu-item" data-page-link="news" href="/admin/news.html">News</a>
+          <a class="menu-item" data-page-link="analytics" href="/admin/analytics.html">Analytics</a>
+          <a class="menu-item" data-page-link="settings" href="/admin/settings.html">Settings</a>
+        </nav>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <h1>News Management</h1>
+          <div class="topbar-right">
+            <label class="search-box">
+              <span>Search</span>
+              <input id="searchInput" type="search" placeholder="Search news" />
+            </label>
+            <button id="logoutButton" class="logout-button" type="button">Log out</button>
+          </div>
+        </header>
+
+        <section class="section-block">
+          <article class="card panel">
+            <div class="panel-heading">
+              <h2>Add or Edit News</h2>
+              <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
+            </div>
+
+            <form id="newsForm" class="schedule-form" autocomplete="off">
+              <input type="hidden" id="newsEditingId" />
+
+              <label for="newsTitle">Title</label>
+              <input id="newsTitle" type="text" placeholder="News title" required />
+
+              <label for="newsDetails">Details</label>
+              <textarea id="newsDetails" rows="3" placeholder="News details" required></textarea>
+
+              <div class="schedule-form-actions">
+                <button id="newsSaveButton" type="submit" class="login-button">Save News</button>
+                <button id="newsCancelButton" type="button" class="refresh-button">Cancel Edit</button>
+              </div>
+              <p id="newsMessage" class="auth-error"></p>
+            </form>
+          </article>
+
+          <article class="card panel panel-wide">
+            <div class="panel-heading">
+              <h2>News List</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Details</th>
+                    <th>Posted</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="newsTableBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/admin/admin-pages.js" defer></script>
+  </body>
+</html>

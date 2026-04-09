@@ -8,50 +8,165 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  Platform,
   View,
+  Image,
 } from "react-native";
-import { API_BASE_URL, loginUser, signUpUser } from "../services/api";
+import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
+import { API_BASE_URL, loginUser, loginWithGoogle, requestPasswordReset, resetPassword, signUpUser } from "../services/api";
 
-const BLOCKED_TRUCK_IDS = new Set(["TRUCK-001"]);
+WebBrowser.maybeCompleteAuthSession();
+
+const googleLogoIcon = require("../../assets/search.png");
+
+function buildGoogleNativeRedirectUri(clientId) {
+  const trimmedClientId = String(clientId || "").trim();
+
+  if (!trimmedClientId) {
+    return undefined;
+  }
+
+  const clientIdWithoutDomain = trimmedClientId.replace(/\.apps\.googleusercontent\.com$/i, "");
+
+  if (!clientIdWithoutDomain) {
+    return undefined;
+  }
+
+  return `com.googleusercontent.apps.${clientIdWithoutDomain}:/oauthredirect`;
+}
+
+function normalizeGoogleClientId(value) {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  if (text.includes("your-")) {
+    return "";
+  }
+
+  if (!text.toLowerCase().endsWith(".apps.googleusercontent.com")) {
+    return "";
+  }
+
+  return text;
+}
+function extractGoogleClientIdFromScheme(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^com\.googleusercontent\.apps\.(.+)$/i);
+
+  if (!match?.[1]) {
+    return "";
+  }
+
+  return `${match[1]}.apps.googleusercontent.com`;
+}
+
+function inferNativeGoogleClientIdsFromExpoConfig() {
+  const schemeConfig = Constants.expoConfig?.scheme;
+  const schemes = Array.isArray(schemeConfig) ? schemeConfig : schemeConfig ? [schemeConfig] : [];
+  const nativeClientIds = schemes.map(extractGoogleClientIdFromScheme).filter(Boolean);
+
+  return {
+    androidClientId: nativeClientIds[0] || "",
+    iosClientId: nativeClientIds[1] || nativeClientIds[0] || "",
+  };
+}
 
 const initialForms = {
-  citizenLogin: {
+  login: {
     email: "",
     password: "",
   },
-  citizenSignup: {
+  signup: {
     name: "",
     email: "",
     password: "",
   },
-  driverLogin: {
+  forgot: {
     email: "",
-    password: "",
-  },
-  driverSignup: {
-    name: "",
-    email: "",
-    password: "",
-    truckId: "",
+    code: "",
+    newPassword: "",
   },
 };
 
 export default function AuthScreen({ onAuthenticated }) {
-  const [portal, setPortal] = useState("citizen");
   const [mode, setMode] = useState("login");
   const [forms, setForms] = useState(initialForms);
   const [errorMessage, setErrorMessage] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const heroOpacity = useRef(new Animated.Value(0)).current;
   const heroTranslateY = useRef(new Animated.Value(28)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
   const formTranslateX = useRef(new Animated.Value(18)).current;
   const orbScale = useRef(new Animated.Value(1)).current;
 
+  const inferredNativeGoogleClientIds = useMemo(() => inferNativeGoogleClientIdsFromExpoConfig(), []);
+
+  const googleClientConfig = useMemo(
+    () => ({
+      expoClientId:
+        Constants.appOwnership === "expo"
+          ? normalizeGoogleClientId(process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID) || undefined
+          : undefined,
+      androidClientId:
+        normalizeGoogleClientId(inferredNativeGoogleClientIds.androidClientId) ||
+        normalizeGoogleClientId(process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID) ||
+        undefined,
+      iosClientId:
+        normalizeGoogleClientId(inferredNativeGoogleClientIds.iosClientId) ||
+        normalizeGoogleClientId(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID) ||
+        undefined,
+      webClientId: normalizeGoogleClientId(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) || undefined,
+    }),
+    [inferredNativeGoogleClientIds.androidClientId, inferredNativeGoogleClientIds.iosClientId]
+  );
+
+  const platformGoogleClientId = useMemo(() => {
+    if (Platform.OS === "android") {
+      return String(googleClientConfig.androidClientId || "").trim();
+    }
+
+    if (Platform.OS === "ios") {
+      return String(googleClientConfig.iosClientId || "").trim();
+    }
+
+    return String(googleClientConfig.webClientId || "").trim();
+  }, [googleClientConfig.androidClientId, googleClientConfig.iosClientId, googleClientConfig.webClientId]);
+
+  const hasGoogleClientConfig = platformGoogleClientId.length > 0;
+
+  const googleRedirectUri = useMemo(() => {
+    if (Platform.OS === "android") {
+      return buildGoogleNativeRedirectUri(googleClientConfig.androidClientId);
+    }
+
+    if (Platform.OS === "ios") {
+      return buildGoogleNativeRedirectUri(googleClientConfig.iosClientId);
+    }
+
+    return undefined;
+  }, [googleClientConfig.androidClientId, googleClientConfig.iosClientId]);
+
+  const [googleRequest, googleResponse, promptGoogleSignIn] = Google.useAuthRequest({
+    ...googleClientConfig,
+    redirectUri: googleRedirectUri,
+    scopes: ["openid", "profile", "email"],
+    selectAccount: true,
+  });
+
   const isLoginMode = mode === "login";
-  const isDriverPortal = portal === "driver";
-  const activeFormKey = `${portal}${isLoginMode ? "Login" : "Signup"}`;
-  const activeForm = forms[activeFormKey];
+  const isSignupMode = mode === "signup";
+  const isForgotMode = mode === "forgot";
+  const activeForm = forms[mode];
+  const isBusy = submitting || googleSubmitting;
   const isNetworkError = errorMessage === "Network request failed";
   const secondaryOrbScale = orbScale.interpolate({
     inputRange: [1, 1.08],
@@ -59,28 +174,32 @@ export default function AuthScreen({ onAuthenticated }) {
   });
 
   const title = useMemo(() => {
-    if (isDriverPortal) {
-      return isLoginMode ? "Driver Dispatch Login" : "Register Driver Account";
+    if (isForgotMode) {
+      return "Reset Password";
     }
 
-    return isLoginMode ? "Citizen Access" : "Create Citizen Account";
-  }, [isDriverPortal, isLoginMode]);
+    return isLoginMode ? "Welcome" : "Create Account";
+  }, [isForgotMode, isLoginMode]);
 
   const subtitle = useMemo(() => {
-    if (isDriverPortal) {
-      return "Sign in as a garbage truck driver to stream your phone GPS as a live truck tracker.";
+    if (isForgotMode) {
+      return "Request a reset code using your email, then set a new password.";
     }
 
-    return "Sign in as a citizen to view live garbage trucks and submit illegal dumping reports.";
-  }, [isDriverPortal]);
+    if (isLoginMode) {
+      return "";
+    }
+
+    return "";
+  }, [isForgotMode, isLoginMode]);
 
   const submitLabel = useMemo(() => {
-    if (isDriverPortal) {
-      return isLoginMode ? "Log In as Driver" : "Create Driver Account";
+    if (isForgotMode) {
+      return "Reset Password";
     }
 
-    return isLoginMode ? "Log In as Citizen" : "Create Citizen Account";
-  }, [isDriverPortal, isLoginMode]);
+    return isLoginMode ? "Log In" : "Create Account";
+  }, [isForgotMode, isLoginMode]);
 
   useEffect(() => {
     Animated.parallel([
@@ -138,58 +257,198 @@ export default function AuthScreen({ onAuthenticated }) {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [formOpacity, formTranslateX, mode, portal]);
-
-  function switchPortal(nextPortal) {
-    setPortal(nextPortal);
-    setErrorMessage("");
-  }
+  }, [formOpacity, formTranslateX, mode]);
 
   function switchMode(nextMode) {
     setMode(nextMode);
+    setShowPassword(false);
     setErrorMessage("");
+    setInfoMessage("");
   }
 
-  function updateActiveForm(field, value) {
-    setForms((currentForms) => ({
-      ...currentForms,
-      [activeFormKey]: {
-        ...currentForms[activeFormKey],
+  function updateForm(formKey, field, value) {
+    setForms((current) => ({
+      ...current,
+      [formKey]: {
+        ...current[formKey],
         [field]: value,
       },
     }));
   }
 
+  useEffect(() => {
+    if (!googleResponse) {
+      return;
+    }
+
+    if (googleResponse.type === "error") {
+      setErrorMessage(googleResponse.error?.message || "Google sign-in failed.");
+      setInfoMessage("");
+      return;
+    }
+
+    if (googleResponse.type !== "success") {
+      return;
+    }
+
+    const idToken = String(
+      googleResponse?.authentication?.idToken ||
+        googleResponse?.params?.id_token ||
+        googleResponse?.params?.idToken ||
+        ""
+    ).trim();
+
+    if (!idToken) {
+      setErrorMessage("Google sign-in did not return an ID token. Please check your Google OAuth client IDs.");
+      return;
+    }
+
+    let isMounted = true;
+
+    const completeGoogleLogin = async () => {
+      setGoogleSubmitting(true);
+      setErrorMessage("");
+      setInfoMessage("");
+
+      try {
+        const response = await loginWithGoogle({ idToken });
+
+        if (!isMounted) {
+          return;
+        }
+
+        onAuthenticated({ token: response.token, user: response.user });
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(error.message || "Google sign-in failed.");
+      } finally {
+        if (isMounted) {
+          setGoogleSubmitting(false);
+        }
+      }
+    };
+
+    completeGoogleLogin();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [googleResponse, onAuthenticated]);
+
+  async function handleGoogleLogin() {
+    if (!hasGoogleClientConfig) {
+      setErrorMessage(
+        "Google login is not configured. Set EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID, EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID, and EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID."
+      );
+      setInfoMessage("");
+      return;
+    }
+
+    if (!googleRequest) {
+      setErrorMessage("Google sign-in is still preparing. Please try again in a moment.");
+      setInfoMessage("");
+      return;
+    }
+
+    setErrorMessage("");
+    setInfoMessage("");
+
+    try {
+      const result = await promptGoogleSignIn();
+
+      if (result?.type === "cancel" || result?.type === "dismiss") {
+        setInfoMessage("");
+      }
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to start Google sign-in.");
+    }
+  }
+
+  async function handleRequestResetCode() {
+    const email = String(forms.forgot.email || "").trim();
+
+    if (!email) {
+      setErrorMessage("Please enter your email first.");
+      setInfoMessage("");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMessage("");
+    setInfoMessage("");
+
+    try {
+      const response = await requestPasswordReset(email);
+      const responseCode = String(response?.resetCode || "");
+
+      if (responseCode) {
+        updateForm("forgot", "code", responseCode);
+        setInfoMessage(`Reset code generated. Demo code: ${responseCode}`);
+      } else {
+        setInfoMessage(response?.message || "If your email exists, a reset code was generated.");
+      }
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to request reset code.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleSubmit() {
     setSubmitting(true);
     setErrorMessage("");
+    setInfoMessage("");
 
     try {
-      const normalizedDriverTruckId = activeForm.truckId?.trim().toUpperCase() || "";
+      if (isLoginMode) {
+        const response = await loginUser({
+          email: String(forms.login.email || "").trim(),
+          password: String(forms.login.password || ""),
+        });
 
-      if (!isLoginMode && isDriverPortal && BLOCKED_TRUCK_IDS.has(normalizedDriverTruckId)) {
-        setErrorMessage("TRUCK-001 is reserved. Please enter your real assigned truck ID.");
+        onAuthenticated({ token: response.token, user: response.user });
         return;
       }
 
-      const payload = isLoginMode
-        ? {
-            email: activeForm.email.trim(),
-            password: activeForm.password,
-            role: portal,
-          }
-        : {
-            name: activeForm.name.trim(),
-            email: activeForm.email.trim(),
-            password: activeForm.password,
-            role: portal,
-            ...(isDriverPortal ? { truckId: normalizedDriverTruckId } : {}),
-          };
+      if (isSignupMode) {
+        const response = await signUpUser({
+          name: String(forms.signup.name || "").trim(),
+          email: String(forms.signup.email || "").trim(),
+          password: String(forms.signup.password || ""),
+          role: "citizen",
+        });
 
-      const response = isLoginMode ? await loginUser(payload) : await signUpUser(payload);
-      onAuthenticated({ token: response.token, user: response.user });
+        onAuthenticated({ token: response.token, user: response.user });
+        return;
+      }
+
+      await resetPassword({
+        email: String(forms.forgot.email || "").trim(),
+        code: String(forms.forgot.code || "").trim(),
+        newPassword: String(forms.forgot.newPassword || ""),
+      });
+
+      setInfoMessage("Password reset complete. Please log in with your new password.");
+      setForms((current) => ({
+        ...current,
+        login: {
+          ...current.login,
+          email: String(current.forgot.email || ""),
+          password: "",
+        },
+        forgot: {
+          ...current.forgot,
+          code: "",
+          newPassword: "",
+        },
+      }));
+      setShowPassword(false);
+      setMode("login");
     } catch (error) {
-      setErrorMessage(error.message);
+      setErrorMessage(error.message || "Request failed");
     } finally {
       setSubmitting(false);
     }
@@ -211,9 +470,9 @@ export default function AuthScreen({ onAuthenticated }) {
           },
         ]}
       >
-        <Text style={styles.kicker}>Waste Monitoring System</Text>
+        <Text style={styles.kicker}>EcoTrack: Waste Monitoring System for Pateros</Text>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
         <Animated.View
           style={{
@@ -221,21 +480,6 @@ export default function AuthScreen({ onAuthenticated }) {
             transform: [{ translateX: formTranslateX }],
           }}
         >
-          <View style={styles.portalRow}>
-            <Pressable
-              style={[styles.portalButton, !isDriverPortal && styles.portalButtonActive]}
-              onPress={() => switchPortal("citizen")}
-            >
-              <Text style={[styles.portalText, !isDriverPortal && styles.portalTextActive]}>Citizen</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.portalButton, isDriverPortal && styles.portalButtonActive]}
-              onPress={() => switchPortal("driver")}
-            >
-              <Text style={[styles.portalText, isDriverPortal && styles.portalTextActive]}>Driver</Text>
-            </Pressable>
-          </View>
-
           <View style={styles.toggleRow}>
             <Pressable
               style={[styles.toggleButton, isLoginMode && styles.toggleButtonActive]}
@@ -244,37 +488,23 @@ export default function AuthScreen({ onAuthenticated }) {
               <Text style={[styles.toggleText, isLoginMode && styles.toggleTextActive]}>Log In</Text>
             </Pressable>
             <Pressable
-              style={[styles.toggleButton, !isLoginMode && styles.toggleButtonActive]}
+              style={[styles.toggleButton, isSignupMode && styles.toggleButtonActive]}
               onPress={() => switchMode("signup")}
             >
-              <Text style={[styles.toggleText, !isLoginMode && styles.toggleTextActive]}>Sign Up</Text>
+              <Text style={[styles.toggleText, isSignupMode && styles.toggleTextActive]}>Sign Up</Text>
             </Pressable>
           </View>
 
-          {!isLoginMode ? (
+          {isSignupMode ? (
             <>
               <Text style={styles.label}>Full Name</Text>
               <TextInput
                 style={styles.input}
-                placeholder={isDriverPortal ? "Driver name" : "Juan Dela Cruz"}
+                placeholder="Juan Dela Cruz"
                 placeholderTextColor="#94a3b8"
                 autoCapitalize="words"
-                value={activeForm.name}
-                onChangeText={(value) => updateActiveForm("name", value)}
-              />
-            </>
-          ) : null}
-
-          {isDriverPortal && !isLoginMode ? (
-            <>
-              <Text style={styles.label}>Assigned Truck ID</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter assigned truck ID"
-                placeholderTextColor="#94a3b8"
-                autoCapitalize="characters"
-                value={activeForm.truckId}
-                onChangeText={(value) => updateActiveForm("truckId", value.toUpperCase())}
+                value={forms.signup.name}
+                onChangeText={(value) => updateForm("signup", "name", value)}
               />
             </>
           ) : null}
@@ -282,32 +512,119 @@ export default function AuthScreen({ onAuthenticated }) {
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
-            placeholder={isDriverPortal ? "driver@example.com" : "name@example.com"}
+            placeholder="name@example.com"
             placeholderTextColor="#94a3b8"
             autoCapitalize="none"
             keyboardType="email-address"
             value={activeForm.email}
-            onChangeText={(value) => updateActiveForm("email", value)}
+            onChangeText={(value) => updateForm(mode, "email", value)}
           />
 
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your password"
-            placeholderTextColor="#94a3b8"
-            secureTextEntry
-            value={activeForm.password}
-            onChangeText={(value) => updateActiveForm("password", value)}
-          />
+          {isForgotMode ? (
+            <>
+              <Text style={styles.label}>Reset Code</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter 6-digit code"
+                placeholderTextColor="#94a3b8"
+                keyboardType="number-pad"
+                value={forms.forgot.code}
+                onChangeText={(value) => updateForm("forgot", "code", value)}
+              />
+
+              <Text style={styles.label}>New Password</Text>
+              <View style={styles.passwordField}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Enter your new password"
+                  placeholderTextColor="#94a3b8"
+                  secureTextEntry={!showPassword}
+                  value={forms.forgot.newPassword}
+                  onChangeText={(value) => updateForm("forgot", "newPassword", value)}
+                />
+                <Pressable
+                  style={styles.passwordIconButton}
+                  onPress={() => setShowPassword((current) => !current)}
+                  hitSlop={8}
+                >
+                  <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#64748b" />
+                </Pressable>
+              </View>
+
+              <Pressable style={styles.secondaryButton} onPress={handleRequestResetCode} disabled={isBusy}>
+                <Text style={styles.secondaryButtonText}>Send Reset Code</Text>
+              </Pressable>
+
+              <Pressable style={styles.forgotLinkButton} onPress={() => switchMode("login")}>
+                <Text style={styles.forgotLinkText}>Back to login</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordField}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#94a3b8"
+                  secureTextEntry={!showPassword}
+                  value={isLoginMode ? forms.login.password : forms.signup.password}
+                  onChangeText={(value) => updateForm(isLoginMode ? "login" : "signup", "password", value)}
+                />
+                <Pressable
+                  style={styles.passwordIconButton}
+                  onPress={() => setShowPassword((current) => !current)}
+                  hitSlop={8}
+                >
+                  <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#64748b" />
+                </Pressable>
+              </View>
+
+              {isLoginMode ? (
+                <Pressable style={styles.forgotLinkButton} onPress={() => switchMode("forgot")}>
+                  <Text style={styles.forgotLinkText}>Forgot password?</Text>
+                </Pressable>
+              ) : null}
+            </>
+          )}
+
+          {isLoginMode || isSignupMode ? (
+            <>
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <Pressable
+                style={[
+                  styles.googleButton,
+                  isBusy && styles.googleButtonDisabled,
+                ]}
+                onPress={handleGoogleLogin}
+                disabled={isBusy}
+              >
+                {googleSubmitting ? (
+                  <ActivityIndicator color="#0f172a" />
+                ) : (
+                  <View style={styles.googleButtonContent}>
+                    <Image source={googleLogoIcon} style={styles.googleButtonIcon} resizeMode="contain" fadeDuration={0} />
+                    <Text style={styles.googleButtonText}>{isSignupMode ? "Sign Up with Google" : "Continue with Google"}</Text>
+                  </View>
+                )}
+              </Pressable>
+            </>
+          ) : null}
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+          {infoMessage ? <Text style={styles.infoText}>{infoMessage}</Text> : null}
           {isNetworkError ? (
             <Text style={styles.hintText}>
               Backend not reachable at {API_BASE_URL}. Start the backend with `npm run waste:start:backend`, or use `npm run waste:start:all` to launch both backend and mobile together. If you are on a real phone, keep the phone and computer on the same Wi-Fi.
             </Text>
           ) : null}
 
-          <Pressable style={styles.primaryButton} onPress={handleSubmit} disabled={submitting}>
+          <Pressable style={styles.primaryButton} onPress={handleSubmit} disabled={isBusy}>
             {submitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>{submitLabel}</Text>}
           </Pressable>
         </Animated.View>
@@ -361,7 +678,7 @@ const styles = StyleSheet.create({
   },
   kicker: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
     letterSpacing: 1,
     textTransform: "uppercase",
     color: "#0f766e",
@@ -373,35 +690,11 @@ const styles = StyleSheet.create({
     color: "#0f172a",
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 18,
     lineHeight: 20,
     color: "#475569",
     marginTop: 10,
     marginBottom: 18,
-  },
-  portalRow: {
-    flexDirection: "row",
-    backgroundColor: "#0f172a",
-    borderRadius: 18,
-    padding: 4,
-    marginBottom: 12,
-  },
-  portalButton: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  portalButtonActive: {
-    backgroundColor: "#ffffff",
-  },
-  portalText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#cbd5e1",
-  },
-  portalTextActive: {
-    color: "#0f172a",
   },
   toggleRow: {
     flexDirection: "row",
@@ -412,7 +705,7 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 24,
     paddingVertical: 10,
     alignItems: "center",
   },
@@ -420,22 +713,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   toggleText: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
     color: "#64748b",
   },
   toggleTextActive: {
     color: "#0f172a",
   },
   label: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: "600",
     color: "#1e293b",
     marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderWidth: 2,
+    borderColor: "#c3cedc",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -444,8 +737,107 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
     marginBottom: 16,
   },
+  passwordField: {
+    position: "relative",
+    marginBottom: 16,
+  },
+  passwordInput: {
+    borderWidth: 2,
+    borderColor: "#c3cedc",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    paddingRight: 46,
+    fontSize: 15,
+    color: "#0f172a",
+    backgroundColor: "#f8fafc",
+  },
+  passwordIconButton: {
+    position: "absolute",
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  forgotLinkButton: {
+    alignSelf: "flex-start",
+    marginBottom: 12,
+    paddingVertical: 3,
+  },
+  forgotLinkText: {
+    color: "#0369a1",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  secondaryButton: {
+    minHeight: 44,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: "#0f766e",
+    backgroundColor: "#ecfeff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  secondaryButtonText: {
+    color: "#0f766e",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    marginTop: 2,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#cbd5e1",
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  googleButton: {
+    minHeight: 64,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: "#c3cedc",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  googleButtonDisabled: {
+    opacity: 0.55,
+  },
+  googleButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+  },
+  googleButtonIcon: {
+    width: 28,
+    height: 28,
+  },
+  googleButtonText: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "800",
+  },
   errorText: {
     color: "#b91c1c",
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  infoText: {
+    color: "#0f766e",
     fontSize: 13,
     marginBottom: 8,
   },

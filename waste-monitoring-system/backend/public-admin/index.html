@@ -10,7 +10,7 @@
     <div class="auth-shell">
       <div class="auth-panel">
         <div class="auth-brand">
-          <h1><span class="logo-mark">ET</span> Eco<span>Track</span></h1>
+          <h1><span class="logo-mark"></span> Eco<span>Track</span></h1>
           <p>Administrator Access</p>
         </div>
 
@@ -19,7 +19,18 @@
           <input id="adminUsername" name="username" type="text" placeholder="Enter your username" required />
 
           <label for="adminPassword">Password</label>
-          <input id="adminPassword" name="password" type="password" placeholder="Enter your password" required />
+          <div class="password-field">
+            <input id="adminPassword" name="password" type="password" placeholder="Enter your password" required />
+            <button
+              id="toggleAdminPassword"
+              class="password-toggle"
+              type="button"
+              aria-label="Show password"
+              aria-pressed="false"
+            >
+              <span aria-hidden="true">&#128065;</span>
+            </button>
+          </div>
 
           <div class="auth-row">
             <label class="remember">
@@ -39,4 +50,5 @@
     <script src="/admin/auth.js" defer></script>
   </body>
 </html>
+
 

@@ -104,6 +104,29 @@ Notes:
 - iOS simulator usually works with `localhost`
 - Physical devices need your computer's LAN IP
 
+## 5. Google Login Setup
+
+Set these environment variables before starting mobile:
+
+```powershell
+$env:EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID = "your-android-client-id.apps.googleusercontent.com"
+$env:EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = "your-ios-client-id.apps.googleusercontent.com"
+$env:EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = "your-web-client-id.apps.googleusercontent.com"
+# Optional for Expo Go auth proxy
+$env:EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID = "your-expo-client-id.apps.googleusercontent.com"
+```
+
+Backend token audience validation should include every Google client ID you use:
+
+```powershell
+$env:GOOGLE_WEB_CLIENT_ID = "your-web-client-id.apps.googleusercontent.com"
+$env:GOOGLE_ANDROID_CLIENT_ID = "your-android-client-id.apps.googleusercontent.com"
+$env:GOOGLE_IOS_CLIENT_ID = "your-ios-client-id.apps.googleusercontent.com"
+```
+
+After changing app scheme settings in `app.json`, rebuild and reinstall your development build once.
+Then run backend + mobile as usual.
+
 ## Mobile Features
 
 - Live map with real-time garbage truck markers

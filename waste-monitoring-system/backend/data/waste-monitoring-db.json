@@ -1,0 +1,50 @@
+{
+  "users": [],
+  "reports": [],
+  "schedule": [
+    {
+      "id": "SCH-001",
+      "day": "Monday",
+      "zone": "Zone 1 - West Pateros",
+      "timeWindow": "6:00 AM - 10:00 AM",
+      "wasteType": "Biodegradable",
+      "notes": "Place bins outside by 5:30 AM"
+    },
+    {
+      "id": "SCH-002",
+      "day": "Tuesday",
+      "zone": "Zone 2 - Central Pateros",
+      "timeWindow": "6:00 AM - 10:00 AM",
+      "wasteType": "Non-biodegradable",
+      "notes": "Use clear bagging for recyclables"
+    },
+    {
+      "id": "SCH-003",
+      "day": "Wednesday",
+      "zone": "Zone 3 - East Pateros",
+      "timeWindow": "7:00 AM - 11:00 AM",
+      "wasteType": "Biodegradable",
+      "notes": "Segregate food waste separately"
+    },
+    {
+      "id": "SCH-004",
+      "day": "Thursday",
+      "zone": "Zone 4 - Riverside",
+      "timeWindow": "7:00 AM - 11:00 AM",
+      "wasteType": "Non-biodegradable",
+      "notes": "Flatten cardboard before disposal"
+    },
+    {
+      "id": "SCH-005",
+      "day": "Friday",
+      "zone": "All Zones",
+      "timeWindow": "8:00 AM - 12:00 PM",
+      "wasteType": "Special Collection",
+      "notes": "Bulk and bulky waste pickup"
+    }
+  ],
+  "counters": {
+    "user": 0,
+    "report": 0
+  }
+}
