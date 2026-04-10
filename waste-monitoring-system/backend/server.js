@@ -57,6 +57,7 @@ const HOST = process.env.HOST || "0.0.0.0";
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017";
 const MONGODB_DB = process.env.MONGODB_DB || "waste_monitoring_system";
 const ADMIN_PUBLIC_DIR = path.join(__dirname, "public-admin");
+const ADMIN_STATIC_CACHE_CONTROL = "no-store, no-cache, must-revalidate, proxy-revalidate";
 
 const USER_ROLES = {
   citizen: "citizen",
@@ -2261,7 +2262,17 @@ app.get("/admin/", (req, res) => {
   res.sendFile(path.join(ADMIN_PUBLIC_DIR, "index.html"));
 });
 
-app.use("/admin", express.static(ADMIN_PUBLIC_DIR));
+app.use(
+  "/admin",
+  (req, res, next) => {
+    res.setHeader("Cache-Control", ADMIN_STATIC_CACHE_CONTROL);
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+    next();
+  },
+  express.static(ADMIN_PUBLIC_DIR)
+);
 
 
 

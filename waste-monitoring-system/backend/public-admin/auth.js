@@ -20,6 +20,20 @@ function storeToken(token, remember) {
   }
 }
 
+function extractErrorMessageFromText(text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.startsWith("<")) {
+    return "";
+  }
+
+  return normalized.slice(0, 180);
+}
+
 function bootstrapAuth() {
   const form = document.getElementById("adminLoginForm");
   const usernameInput = document.getElementById("adminUsername");
@@ -66,16 +80,31 @@ function bootstrapAuth() {
     try {
       const response = await fetch("/admin/auth/login", {
         method: "POST",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ username, password }),
       });
 
-      const payload = await response.json().catch(() => ({}));
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      const payload = contentType.includes("application/json")
+        ? await response.json().catch(() => ({}))
+        : {};
+      const responseText = contentType.includes("application/json")
+        ? ""
+        : await response.text().catch(() => "");
 
       if (!response.ok || !payload.token) {
-        throw new Error(payload.error || "Invalid credentials");
+        const fallbackMessage = response.ok
+          ? "Unexpected sign-in response from server. Please refresh and try again."
+          : `Sign in failed (${response.status || "unknown error"}).`;
+        throw new Error(
+          payload.error ||
+            payload.message ||
+            extractErrorMessageFromText(responseText) ||
+            fallbackMessage
+        );
       }
 
       storeToken(payload.token, rememberMe.checked);
