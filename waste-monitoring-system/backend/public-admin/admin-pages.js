@@ -1660,9 +1660,82 @@ function setupSearch() {
       renderNews(state.payload.news || []);
     }
 
-    renderDrivers(state.drivers || []);
+  renderDrivers(state.drivers || []);
   });
 }
+
+function setupResponsiveSidebar() {
+  const sidebar = document.querySelector(".sidebar");
+  const topbar = document.querySelector(".topbar");
+
+  if (!sidebar || !topbar || topbar.dataset.sidebarBound === "1") {
+    return;
+  }
+
+  topbar.dataset.sidebarBound = "1";
+
+  const navToggleButton = document.createElement("button");
+  navToggleButton.type = "button";
+  navToggleButton.className = "nav-toggle-button";
+  navToggleButton.setAttribute("aria-label", "Open navigation menu");
+  navToggleButton.setAttribute("aria-expanded", "false");
+  navToggleButton.innerHTML = "<span></span><span></span><span></span>";
+
+  const sidebarOverlay = document.createElement("button");
+  sidebarOverlay.type = "button";
+  sidebarOverlay.className = "sidebar-overlay";
+  sidebarOverlay.setAttribute("aria-label", "Close navigation menu");
+
+  topbar.insertBefore(navToggleButton, topbar.firstChild);
+  document.body.appendChild(sidebarOverlay);
+
+  const mobileMedia = window.matchMedia("(max-width: 1100px)");
+
+  function closeSidebar() {
+    document.body.classList.remove("admin-nav-open");
+    navToggleButton.setAttribute("aria-expanded", "false");
+    navToggleButton.setAttribute("aria-label", "Open navigation menu");
+  }
+
+  function openSidebar() {
+    document.body.classList.add("admin-nav-open");
+    navToggleButton.setAttribute("aria-expanded", "true");
+    navToggleButton.setAttribute("aria-label", "Close navigation menu");
+  }
+
+  navToggleButton.addEventListener("click", () => {
+    const isOpen = document.body.classList.contains("admin-nav-open");
+    if (isOpen) {
+      closeSidebar();
+      return;
+    }
+
+    openSidebar();
+  });
+
+  sidebarOverlay.addEventListener("click", closeSidebar);
+
+  sidebar.querySelectorAll(".menu-item").forEach((link) => {
+    link.addEventListener("click", () => {
+      if (mobileMedia.matches) {
+        closeSidebar();
+      }
+    });
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeSidebar();
+    }
+  });
+
+  mobileMedia.addEventListener("change", (event) => {
+    if (!event.matches) {
+      closeSidebar();
+    }
+  });
+}
+
 function bootstrap() {
   state.token = getStoredToken();
 
@@ -1672,6 +1745,7 @@ function bootstrap() {
   }
 
   setMenuActive();
+  setupResponsiveSidebar();
 
   const logoutButton = document.getElementById("logoutButton");
   if (logoutButton) {
