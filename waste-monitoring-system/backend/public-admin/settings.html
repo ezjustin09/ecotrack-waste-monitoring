@@ -38,9 +38,23 @@
               <h2>Backend Configuration</h2>
               <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
             </div>
-            <p class="settings-text">Admin credentials are controlled by backend environment variables <code>ADMIN_USER</code> and <code>ADMIN_PASSWORD</code>.</p>
+            <p class="settings-text">Admin credentials are controlled by backend environment variables <code>ADMIN_USER</code> and <code>ADMIN_PASSWORD_HASH</code>.</p>
             <p class="settings-text">Database type: <strong id="dbType">Loading...</strong></p>
             <p class="settings-text">Database name: <strong id="dbName">Loading...</strong></p>
+          </article>
+
+          <article class="card panel">
+            <div class="panel-heading">
+              <h2>Push Diagnostics</h2>
+            </div>
+            <p class="settings-text">Expo access token: <strong id="pushConfigStatus">Loading...</strong></p>
+            <p class="settings-text">Registered device tokens: <strong id="pushRegisteredTokenCount">Loading...</strong></p>
+            <p class="settings-text">Token samples: <strong id="pushTokenSamples">Loading...</strong></p>
+            <p class="settings-text">Last registration: <strong id="pushLastRegistration">Loading...</strong></p>
+            <p class="settings-text">Last removal: <strong id="pushLastRemoval">Loading...</strong></p>
+            <p class="settings-text">Last broadcast: <strong id="pushLastBroadcast">Loading...</strong></p>
+            <p class="settings-text">Last broadcast errors:</p>
+            <pre id="pushLastErrors" class="diagnostics-box">Loading...</pre>
           </article>
         </section>
       </main>

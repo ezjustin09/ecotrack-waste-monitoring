@@ -1336,6 +1336,158 @@ async function renderBackendInfo() {
   }
 }
 
+function formatDiagnosticEvent(event) {
+  if (!event) {
+    return "No data yet";
+  }
+
+  const parts = [];
+
+  if (event.timestamp) {
+    parts.push(formatDateTime(event.timestamp));
+  }
+
+  if (event.status) {
+    parts.push(`status: ${event.status}`);
+  }
+
+  if (event.kind) {
+    parts.push(`kind: ${event.kind}`);
+  }
+
+  if (event.feedId) {
+    parts.push(`feed: ${event.feedId}`);
+  }
+
+  if (event.userId) {
+    parts.push(`user: ${event.userId}`);
+  }
+
+  if (event.platform) {
+    parts.push(`platform: ${event.platform}`);
+  }
+
+  if (event.pushToken) {
+    parts.push(`token: ${event.pushToken}`);
+  }
+
+  if (typeof event.availableTokenCount === "number") {
+    parts.push(`available tokens: ${event.availableTokenCount}`);
+  }
+
+  if (typeof event.requested === "number") {
+    parts.push(`requested: ${event.requested}`);
+  }
+
+  if (typeof event.accepted === "number") {
+    parts.push(`accepted: ${event.accepted}`);
+  }
+
+  if (typeof event.ticketCount === "number") {
+    parts.push(`tickets: ${event.ticketCount}`);
+  }
+
+  if (typeof event.receiptCheckedCount === "number") {
+    parts.push(`receipts: ${event.receiptCheckedCount}`);
+  }
+
+  if (typeof event.dropped === "number") {
+    parts.push(`dropped: ${event.dropped}`);
+  }
+
+  if (typeof event.modifiedCount === "number") {
+    parts.push(`modified: ${event.modifiedCount}`);
+  }
+
+  return parts.join(" | ") || "No data yet";
+}
+
+async function renderPushDiagnostics() {
+  const pushConfigStatusNode = document.getElementById("pushConfigStatus");
+  const registeredTokenCountNode = document.getElementById("pushRegisteredTokenCount");
+  const tokenSamplesNode = document.getElementById("pushTokenSamples");
+  const lastRegistrationNode = document.getElementById("pushLastRegistration");
+  const lastRemovalNode = document.getElementById("pushLastRemoval");
+  const lastBroadcastNode = document.getElementById("pushLastBroadcast");
+  const lastErrorsNode = document.getElementById("pushLastErrors");
+
+  if (
+    !pushConfigStatusNode &&
+    !registeredTokenCountNode &&
+    !tokenSamplesNode &&
+    !lastRegistrationNode &&
+    !lastRemovalNode &&
+    !lastBroadcastNode &&
+    !lastErrorsNode
+  ) {
+    return;
+  }
+
+  try {
+    const payload = await adminRequest("/admin/push/status", "GET");
+
+    if (pushConfigStatusNode) {
+      pushConfigStatusNode.textContent = payload?.configured?.expoPushAccessTokenPresent ? "Configured" : "Not configured";
+    }
+
+    if (registeredTokenCountNode) {
+      registeredTokenCountNode.textContent = String(payload?.registeredTokenCount ?? 0);
+    }
+
+    if (tokenSamplesNode) {
+      const samples = Array.isArray(payload?.registeredTokenSamples) ? payload.registeredTokenSamples : [];
+      tokenSamplesNode.textContent = samples.length > 0 ? samples.join(", ") : "No registered tokens";
+    }
+
+    if (lastRegistrationNode) {
+      lastRegistrationNode.textContent = formatDiagnosticEvent(payload?.lastRegistration);
+    }
+
+    if (lastRemovalNode) {
+      lastRemovalNode.textContent = formatDiagnosticEvent(payload?.lastRemoval);
+    }
+
+    if (lastBroadcastNode) {
+      lastBroadcastNode.textContent = formatDiagnosticEvent(payload?.lastBroadcast);
+    }
+
+    if (lastErrorsNode) {
+      const errors = Array.isArray(payload?.lastBroadcast?.errors) ? payload.lastBroadcast.errors : [];
+      lastErrorsNode.textContent = errors.length > 0 ? JSON.stringify(errors, null, 2) : "No push errors recorded";
+    }
+  } catch (error) {
+    const fallbackMessage = error.message || "Unable to load push diagnostics.";
+
+    if (pushConfigStatusNode) {
+      pushConfigStatusNode.textContent = fallbackMessage;
+    }
+
+    if (registeredTokenCountNode) {
+      registeredTokenCountNode.textContent = "unavailable";
+    }
+
+    if (tokenSamplesNode) {
+      tokenSamplesNode.textContent = fallbackMessage;
+    }
+
+    if (lastRegistrationNode) {
+      lastRegistrationNode.textContent = fallbackMessage;
+    }
+
+    if (lastRemovalNode) {
+      lastRemovalNode.textContent = fallbackMessage;
+    }
+
+    if (lastBroadcastNode) {
+      lastBroadcastNode.textContent = fallbackMessage;
+    }
+
+    if (lastErrorsNode) {
+      lastErrorsNode.textContent = fallbackMessage;
+    }
+  }
+}
+
 function applyPayload(payload) {
   state.payload = payload || {};
 
@@ -1382,6 +1534,7 @@ async function fetchDashboard() {
     const payload = await response.json();
     applyPayload(payload);
     await renderBackendInfo();
+    await renderPushDiagnostics();
   } catch (error) {
     const chipsNode = document.getElementById("statusChips");
     if (chipsNode && !state.payload) {

@@ -84,7 +84,10 @@ const SMTP_FROM = String(process.env.SMTP_FROM || SMTP_USER || "").trim();
 const SMTP_FROM_NAME = String(process.env.SMTP_FROM_NAME || "EcoTrack Waste Monitoring").trim();
 const EMAIL_SENDING_ENABLED = Boolean(SMTP_USER && SMTP_PASS && SMTP_FROM);
 const EXPO_PUSH_API_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_PUSH_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
 const EXPO_PUSH_CHUNK_SIZE = 100;
+const EXPO_PUSH_RECEIPT_CHUNK_SIZE = 300;
+const EXPO_PUSH_RECEIPT_WAIT_MS = 2000;
 const EXPO_PUSH_ACCESS_TOKEN = String(process.env.EXPO_PUSH_ACCESS_TOKEN || "").trim();
 const GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
 const DEV_DEFAULT_ALLOWED_ORIGINS = [
@@ -165,6 +168,11 @@ let userSessionsCollection;
 let adminSessionsCollection;
 let passwordResetCodesCollection;
 let mailTransporter = null;
+const pushDiagnostics = {
+  lastRegistration: null,
+  lastRemoval: null,
+  lastBroadcast: null,
+};
 
 if (EMAIL_SENDING_ENABLED) {
   mailTransporter = nodemailer.createTransport({
@@ -750,6 +758,33 @@ function chunkArray(items, chunkSize) {
   return chunks;
 }
 
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function maskPushToken(token) {
+  const normalized = normalizePushToken(token);
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length <= 20) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 10)}...${normalized.slice(-6)}`;
+}
+
+function snapshotPushDiagnosticEvent(event = {}) {
+  return {
+    ...event,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 async function registerUserPushToken(userId, pushToken, platform = "") {
   if (!userId || !pushToken) {
     return false;
@@ -769,6 +804,16 @@ async function registerUserPushToken(userId, pushToken, platform = "") {
   }
 
   const result = await usersCollection.updateOne({ id: userId }, update);
+  pushDiagnostics.lastRegistration = snapshotPushDiagnosticEvent({
+    userId,
+    platform: platform || "unknown",
+    pushToken: maskPushToken(pushToken),
+    registered: result.matchedCount > 0,
+    modifiedCount: Number(result.modifiedCount || 0),
+  });
+  console.log(
+    `[push] register token user=${userId} platform=${platform || "unknown"} token=${maskPushToken(pushToken)} matched=${result.matchedCount} modified=${result.modifiedCount || 0}`
+  );
   return result.matchedCount > 0;
 }
 
@@ -789,6 +834,15 @@ async function removeUserPushToken(userId, pushToken) {
     }
   );
 
+  pushDiagnostics.lastRemoval = snapshotPushDiagnosticEvent({
+    userId,
+    pushToken: maskPushToken(pushToken),
+    removed: result.matchedCount > 0,
+    modifiedCount: Number(result.modifiedCount || 0),
+  });
+  console.log(
+    `[push] remove token user=${userId} token=${maskPushToken(pushToken)} matched=${result.matchedCount} modified=${result.modifiedCount || 0}`
+  );
   return result.matchedCount > 0;
 }
 
@@ -811,6 +865,21 @@ async function listExpoPushTokens() {
   }
 
   return Array.from(tokenSet);
+}
+
+async function buildPushDiagnosticsStatus() {
+  const registeredTokens = await listExpoPushTokens();
+
+  return {
+    configured: {
+      expoPushAccessTokenPresent: Boolean(EXPO_PUSH_ACCESS_TOKEN),
+    },
+    registeredTokenCount: registeredTokens.length,
+    registeredTokenSamples: registeredTokens.slice(0, 5).map(maskPushToken),
+    lastRegistration: pushDiagnostics.lastRegistration,
+    lastRemoval: pushDiagnostics.lastRemoval,
+    lastBroadcast: pushDiagnostics.lastBroadcast,
+  };
 }
 
 async function removeUnregisteredPushTokens(tokens = []) {
@@ -836,6 +905,7 @@ async function sendExpoPushBatch(messages = []) {
       okCount: 0,
       droppedTokens: [],
       errors: [],
+      ticketEntries: [],
     };
   }
 
@@ -856,7 +926,10 @@ async function sendExpoPushBatch(messages = []) {
   });
 
   if (!response.ok) {
-    throw new Error(`Expo push API request failed with status ${response.status}`);
+    const responseText = await response.text().catch(() => "");
+    throw new Error(
+      `Expo push API request failed with status ${response.status}${responseText ? `: ${responseText.slice(0, 300)}` : ""}`
+    );
   }
 
   const payload = await response.json().catch(() => null);
@@ -864,10 +937,18 @@ async function sendExpoPushBatch(messages = []) {
   let okCount = 0;
   const droppedTokens = [];
   const errors = [];
+  const ticketEntries = [];
 
   dataRows.forEach((row, index) => {
     if (row?.status === "ok") {
       okCount += 1;
+      const ticketId = String(row?.id || "").trim();
+      if (ticketId) {
+        ticketEntries.push({
+          id: ticketId,
+          token: normalizePushToken(messages[index]?.to || ""),
+        });
+      }
       return;
     }
 
@@ -889,21 +970,123 @@ async function sendExpoPushBatch(messages = []) {
     okCount,
     droppedTokens,
     errors,
+    ticketEntries,
+  };
+}
+
+async function fetchExpoPushReceipts(ticketEntries = []) {
+  if (!Array.isArray(ticketEntries) || ticketEntries.length === 0) {
+    return {
+      okCount: 0,
+      droppedTokens: [],
+      errors: [],
+      checkedCount: 0,
+    };
+  }
+
+  const headers = {
+    Accept: "application/json",
+    "Accept-Encoding": "gzip, deflate",
+    "Content-Type": "application/json",
+  };
+
+  if (EXPO_PUSH_ACCESS_TOKEN) {
+    headers.Authorization = `Bearer ${EXPO_PUSH_ACCESS_TOKEN}`;
+  }
+
+  const response = await fetch(EXPO_PUSH_RECEIPTS_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      ids: ticketEntries.map((entry) => entry.id),
+    }),
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text().catch(() => "");
+    throw new Error(
+      `Expo receipt request failed with status ${response.status}${responseText ? `: ${responseText.slice(0, 300)}` : ""}`
+    );
+  }
+
+  const payload = await response.json().catch(() => null);
+  const receiptMap = payload?.data && typeof payload.data === "object" ? payload.data : {};
+  let okCount = 0;
+  const droppedTokens = [];
+  const errors = [];
+
+  ticketEntries.forEach((entry) => {
+    const receipt = receiptMap[entry.id];
+
+    if (!receipt) {
+      errors.push({
+        token: normalizePushToken(entry.token || ""),
+        ticketId: entry.id,
+        message: "Missing Expo push receipt",
+      });
+      return;
+    }
+
+    if (receipt.status === "ok") {
+      okCount += 1;
+      return;
+    }
+
+    const errorCode = String(receipt?.details?.error || receipt?.message || "").trim();
+    const normalizedToken = normalizePushToken(entry.token || "");
+
+    if (errorCode === "DeviceNotRegistered" && normalizedToken) {
+      droppedTokens.push(normalizedToken);
+    }
+
+    errors.push({
+      token: normalizedToken,
+      ticketId: entry.id,
+      message: errorCode || "Unknown Expo push receipt error",
+    });
+  });
+
+  return {
+    okCount,
+    droppedTokens,
+    errors,
+    checkedCount: ticketEntries.length,
   };
 }
 
 async function sendBroadcastFeedPushNotification(kind, item) {
   const pushTokens = await listExpoPushTokens();
+  const safeKind = kind === "news" ? "news" : "announcement";
+  const baseEvent = {
+    kind: safeKind,
+    feedId: String(item?.id || "").trim(),
+    title: String(item?.title || "").trim(),
+    availableTokenCount: pushTokens.length,
+    tokenSamples: pushTokens.slice(0, 5).map(maskPushToken),
+  };
 
   if (pushTokens.length === 0) {
+    pushDiagnostics.lastBroadcast = snapshotPushDiagnosticEvent({
+      ...baseEvent,
+      status: "no_tokens",
+      requested: 0,
+      accepted: 0,
+      ticketCount: 0,
+      receiptCheckedCount: 0,
+      dropped: 0,
+      errors: [],
+    });
+    console.warn(`[push] Skipped ${safeKind} broadcast because no Expo push tokens are registered.`);
     return {
       requested: 0,
       accepted: 0,
+      ticketCount: 0,
+      receiptCheckedCount: 0,
       dropped: 0,
+      errors: [],
     };
   }
 
-  const safeKind = kind === "news" ? "news" : "announcement";
   const title = safeKind === "announcement" ? "New Announcement" : "News Update";
   const body = String(item?.title || "").trim() || (safeKind === "announcement"
     ? "A new community announcement has been posted."
@@ -929,6 +1112,10 @@ async function sendBroadcastFeedPushNotification(kind, item) {
   let accepted = 0;
   const droppedTokens = [];
   const pushErrors = [];
+  const ticketEntries = [];
+  console.log(
+    `[push] Sending ${safeKind} broadcast for ${baseEvent.feedId || "unknown"} to ${messages.length} registered token(s).`
+  );
 
   for (const chunk of chunks) {
     try {
@@ -936,8 +1123,36 @@ async function sendBroadcastFeedPushNotification(kind, item) {
       accepted += result.okCount;
       droppedTokens.push(...result.droppedTokens);
       pushErrors.push(...(result.errors || []));
+      ticketEntries.push(...(result.ticketEntries || []));
     } catch (error) {
       console.error("[push] Expo push chunk failed:", error?.message || error);
+      pushErrors.push({
+        token: "",
+        message: String(error?.message || error || "Expo push chunk failed"),
+      });
+    }
+  }
+
+  let receiptCheckedCount = 0;
+
+  if (ticketEntries.length > 0) {
+    await wait(EXPO_PUSH_RECEIPT_WAIT_MS);
+    const receiptChunks = chunkArray(ticketEntries, EXPO_PUSH_RECEIPT_CHUNK_SIZE);
+
+    for (const receiptChunk of receiptChunks) {
+      try {
+        const receiptResult = await fetchExpoPushReceipts(receiptChunk);
+        receiptCheckedCount += receiptResult.checkedCount || 0;
+        droppedTokens.push(...(receiptResult.droppedTokens || []));
+        pushErrors.push(...(receiptResult.errors || []));
+      } catch (error) {
+        console.error("[push] Expo push receipt lookup failed:", error?.message || error);
+        pushErrors.push({
+          token: "",
+          ticketId: "",
+          message: String(error?.message || error || "Expo push receipt lookup failed"),
+        });
+      }
     }
   }
 
@@ -946,9 +1161,26 @@ async function sendBroadcastFeedPushNotification(kind, item) {
     console.log(`[push] Removed ${removedCount} stale push token(s) from user records.`);
   }
 
+  pushDiagnostics.lastBroadcast = snapshotPushDiagnosticEvent({
+    ...baseEvent,
+    status: pushErrors.length > 0 && accepted === 0 ? "failed" : pushErrors.length > 0 ? "partial" : "ok",
+    requested: messages.length,
+    accepted,
+    ticketCount: ticketEntries.length,
+    receiptCheckedCount,
+    dropped: droppedTokens.length,
+    droppedTokenSamples: droppedTokens.slice(0, 5).map(maskPushToken),
+    errors: pushErrors.slice(0, 10),
+  });
+  console.log(
+    `[push] ${safeKind} broadcast result requested=${messages.length} accepted=${accepted} tickets=${ticketEntries.length} receipts=${receiptCheckedCount} dropped=${droppedTokens.length} errors=${pushErrors.length}`
+  );
+
   return {
     requested: messages.length,
     accepted,
+    ticketCount: ticketEntries.length,
+    receiptCheckedCount,
     dropped: droppedTokens.length,
     errors: pushErrors,
   };
@@ -1581,6 +1813,7 @@ app.get("/", (req, res) => {
       "POST /admin/news",
       "PUT /admin/news/:id",
       "DELETE /admin/news/:id",
+      "GET /admin/push/status",
       "GET /announcements",
       "GET /news",
     ],
@@ -1637,6 +1870,14 @@ app.post(
     });
   })
 );
+app.get(
+  "/admin/push/status",
+  authenticateAdminRequest,
+  asyncRoute(async (req, res) => {
+    res.json(await buildPushDiagnosticsStatus());
+  })
+);
+
 app.get(
   "/admin/dashboard",
   authenticateAdminRequest,

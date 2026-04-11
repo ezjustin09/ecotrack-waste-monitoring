@@ -541,6 +541,19 @@ th {
   color: var(--slate-700);
 }
 
+.diagnostics-box {
+  margin: 6px 0 0;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: var(--slate-700);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .empty {
   color: #94a3b8;
   font-style: italic;
