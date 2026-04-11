@@ -6,3 +6,4 @@ data/ecotrack-db.json
 **/.env
 waste-monitoring-system/mobile/google-services.json
 waste-monitoring-system/mobile/GoogleService-Info.plist
+waste-monitoring-system/mobile/.expo/
