@@ -55,7 +55,11 @@ export default function SettingsScreen() {
       }
 
       await setFeedNotificationsEnabled(nextValue);
-      setInfoMessage(nextValue ? "Notifications enabled for announcements and nearby trucks." : "Notifications turned off.");
+      setInfoMessage(
+        nextValue
+          ? "Notifications enabled. Open Live Map once to sync the location used for nearby truck alerts."
+          : "Notifications turned off."
+      );
     } catch (error) {
       if (!handleAuthError(error.message)) {
         setErrorMessage(error.message || "Unable to update notification preference.");

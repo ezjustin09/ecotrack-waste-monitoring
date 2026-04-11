@@ -55,6 +55,10 @@ function getImmediateTrigger() {
   return null;
 }
 
+function isNearbyTruckNotificationData(data = {}) {
+  return String(data?.type || "").trim().toLowerCase() === "nearby-truck";
+}
+
 export async function getNearbyTruckAlertsStatusAsync() {
   if (Platform.OS === "web") {
     return {
@@ -147,8 +151,20 @@ export async function clearNearbyTruckNotificationsAsync() {
     return;
   }
 
-  await Notifications.dismissAllNotificationsAsync();
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  const presentedNotifications = await Notifications.getPresentedNotificationsAsync().catch(() => []);
+  const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync().catch(() => []);
+
+  await Promise.all(
+    presentedNotifications
+      .filter((notification) => isNearbyTruckNotificationData(notification?.request?.content?.data))
+      .map((notification) => Notifications.dismissNotificationAsync(notification.request.identifier).catch(() => {}))
+  );
+
+  await Promise.all(
+    scheduledNotifications
+      .filter((notification) => isNearbyTruckNotificationData(notification?.content?.data))
+      .map((notification) => Notifications.cancelScheduledNotificationAsync(notification.identifier).catch(() => {}))
+  );
 }
 
 export async function sendNearbyTruckNotificationAsync(truck, distanceMeters) {

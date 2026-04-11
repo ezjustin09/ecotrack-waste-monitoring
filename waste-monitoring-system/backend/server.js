@@ -88,6 +88,8 @@ const EXPO_PUSH_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
 const EXPO_PUSH_CHUNK_SIZE = 100;
 const EXPO_PUSH_RECEIPT_CHUNK_SIZE = 300;
 const EXPO_PUSH_RECEIPT_WAIT_MS = 2000;
+const NEARBY_TRUCK_ALERT_RADIUS_METERS = 500;
+const NEARBY_TRUCK_ALERT_REARM_METERS = 650;
 const EXPO_PUSH_ACCESS_TOKEN = String(process.env.EXPO_PUSH_ACCESS_TOKEN || "").trim();
 const GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
 const DEV_DEFAULT_ALLOWED_ORIGINS = [
@@ -172,7 +174,10 @@ const pushDiagnostics = {
   lastRegistration: null,
   lastRemoval: null,
   lastBroadcast: null,
+  lastLocationSync: null,
+  lastNearbyTruckAlert: null,
 };
+const nearbyTruckAlertStateByUserId = new Map();
 
 if (EMAIL_SENDING_ENABLED) {
   mailTransporter = nodemailer.createTransport({
@@ -747,6 +752,32 @@ function normalizePushTokenPayload(payload = {}) {
   };
 }
 
+function normalizeNearbyAlertLocationPayload(payload = {}) {
+  const latitude = parseCoordinate(payload.latitude ?? payload.location?.latitude);
+  const longitude = parseCoordinate(payload.longitude ?? payload.location?.longitude);
+  const accuracy = parseCoordinate(payload.accuracy ?? payload.location?.accuracy);
+  const source = String(payload.source || payload.location?.source || "mobile").trim().toLowerCase();
+
+  if (latitude === null || longitude === null) {
+    return {
+      error: "latitude and longitude are required",
+    };
+  }
+
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return {
+      error: "latitude or longitude is out of range",
+    };
+  }
+
+  return {
+    latitude,
+    longitude,
+    accuracy: Number.isFinite(accuracy) ? accuracy : null,
+    source: source || "mobile",
+  };
+}
+
 function chunkArray(items, chunkSize) {
   const normalizedChunkSize = Number(chunkSize) > 0 ? Number(chunkSize) : 100;
   const chunks = [];
@@ -783,6 +814,91 @@ function snapshotPushDiagnosticEvent(event = {}) {
     ...event,
     timestamp: new Date().toISOString(),
   };
+}
+
+function formatDistanceMeters(distanceMeters) {
+  if (!Number.isFinite(distanceMeters)) {
+    return "unknown distance";
+  }
+
+  if (distanceMeters < 1000) {
+    return `${Math.max(1, Math.round(distanceMeters))} m`;
+  }
+
+  const decimals = distanceMeters < 10000 ? 1 : 0;
+  return `${(distanceMeters / 1000).toFixed(decimals)} km`;
+}
+
+function getDistanceMeters(origin, target) {
+  if (!origin || !target) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const toRadians = (value) => (value * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+  const latitudeDelta = toRadians(target.latitude - origin.latitude);
+  const longitudeDelta = toRadians(target.longitude - origin.longitude);
+  const originLatitude = toRadians(origin.latitude);
+  const targetLatitude = toRadians(target.latitude);
+  const haversineA =
+    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
+    Math.cos(originLatitude) * Math.cos(targetLatitude) * Math.sin(longitudeDelta / 2) * Math.sin(longitudeDelta / 2);
+  const haversineC = 2 * Math.atan2(Math.sqrt(haversineA), Math.sqrt(1 - haversineA));
+
+  return earthRadiusMeters * haversineC;
+}
+
+function getNearbyTruckState(userId, truckId) {
+  if (!userId || !truckId) {
+    return null;
+  }
+
+  const userState = nearbyTruckAlertStateByUserId.get(userId);
+  return userState?.get(truckId) || null;
+}
+
+function setNearbyTruckState(userId, truckId, state) {
+  if (!userId || !truckId) {
+    return;
+  }
+
+  if (!nearbyTruckAlertStateByUserId.has(userId)) {
+    nearbyTruckAlertStateByUserId.set(userId, new Map());
+  }
+
+  const userState = nearbyTruckAlertStateByUserId.get(userId);
+  userState.set(truckId, state);
+}
+
+function deleteNearbyTruckState(userId, truckId) {
+  if (!userId || !truckId) {
+    return;
+  }
+
+  const userState = nearbyTruckAlertStateByUserId.get(userId);
+  if (!userState) {
+    return;
+  }
+
+  userState.delete(truckId);
+
+  if (userState.size === 0) {
+    nearbyTruckAlertStateByUserId.delete(userId);
+  }
+}
+
+function clearNearbyTruckStateForTruck(truckId) {
+  if (!truckId) {
+    return;
+  }
+
+  for (const [userId, userState] of nearbyTruckAlertStateByUserId.entries()) {
+    userState.delete(truckId);
+
+    if (userState.size === 0) {
+      nearbyTruckAlertStateByUserId.delete(userId);
+    }
+  }
 }
 
 async function registerUserPushToken(userId, pushToken, platform = "") {
@@ -879,7 +995,96 @@ async function buildPushDiagnosticsStatus() {
     lastRegistration: pushDiagnostics.lastRegistration,
     lastRemoval: pushDiagnostics.lastRemoval,
     lastBroadcast: pushDiagnostics.lastBroadcast,
+    lastLocationSync: pushDiagnostics.lastLocationSync,
+    lastNearbyTruckAlert: pushDiagnostics.lastNearbyTruckAlert,
   };
+}
+
+async function updateUserNearbyAlertLocation(userId, location) {
+  if (!userId || !location) {
+    return false;
+  }
+
+  const normalizedLocation = {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    updatedAt: new Date(),
+    source: location.source || "mobile",
+  };
+
+  if (Number.isFinite(location.accuracy)) {
+    normalizedLocation.accuracy = location.accuracy;
+  }
+
+  const result = await usersCollection.updateOne(
+    { id: userId },
+    {
+      $set: {
+        nearbyAlertLocation: normalizedLocation,
+      },
+    }
+  );
+
+  pushDiagnostics.lastLocationSync = snapshotPushDiagnosticEvent({
+    userId,
+    source: normalizedLocation.source,
+    latitude: normalizedLocation.latitude,
+    longitude: normalizedLocation.longitude,
+    accuracy: normalizedLocation.accuracy,
+    updated: result.matchedCount > 0,
+    modifiedCount: Number(result.modifiedCount || 0),
+  });
+  console.log(
+    `[push] sync location user=${userId} source=${normalizedLocation.source} lat=${normalizedLocation.latitude.toFixed(5)} lng=${normalizedLocation.longitude.toFixed(5)} matched=${result.matchedCount} modified=${result.modifiedCount || 0}`
+  );
+
+  return result.matchedCount > 0;
+}
+
+async function clearUserNearbyAlertLocation(userId) {
+  if (!userId) {
+    return false;
+  }
+
+  const result = await usersCollection.updateOne(
+    { id: userId },
+    {
+      $unset: {
+        nearbyAlertLocation: "",
+      },
+    }
+  );
+
+  nearbyTruckAlertStateByUserId.delete(userId);
+  pushDiagnostics.lastLocationSync = snapshotPushDiagnosticEvent({
+    userId,
+    cleared: true,
+    modifiedCount: Number(result.modifiedCount || 0),
+  });
+  console.log(`[push] clear location user=${userId} matched=${result.matchedCount} modified=${result.modifiedCount || 0}`);
+
+  return result.matchedCount > 0;
+}
+
+async function listUsersEligibleForNearbyTruckAlerts() {
+  return usersCollection
+    .find(
+      {
+        role: USER_ROLES.citizen,
+        pushTokens: { $exists: true, $ne: [] },
+        "nearbyAlertLocation.latitude": { $type: "number" },
+        "nearbyAlertLocation.longitude": { $type: "number" },
+      },
+      {
+        projection: {
+          id: 1,
+          name: 1,
+          pushTokens: 1,
+          nearbyAlertLocation: 1,
+        },
+      }
+    )
+    .toArray();
 }
 
 async function removeUnregisteredPushTokens(tokens = []) {
@@ -1054,6 +1259,87 @@ async function fetchExpoPushReceipts(ticketEntries = []) {
   };
 }
 
+function collectUserExpoPushTokens(user) {
+  const pushTokenValues = Array.isArray(user?.pushTokens) ? user.pushTokens : [user?.pushTokens];
+  return Array.from(
+    new Set(pushTokenValues.map((value) => normalizePushToken(value)).filter((value) => isExpoPushToken(value)))
+  );
+}
+
+async function deliverExpoPushMessages(messages = []) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return {
+      requested: 0,
+      accepted: 0,
+      ticketCount: 0,
+      receiptCheckedCount: 0,
+      dropped: 0,
+      droppedTokens: [],
+      errors: [],
+    };
+  }
+
+  const chunks = chunkArray(messages, EXPO_PUSH_CHUNK_SIZE);
+  let accepted = 0;
+  const droppedTokens = [];
+  const pushErrors = [];
+  const ticketEntries = [];
+
+  for (const chunk of chunks) {
+    try {
+      const result = await sendExpoPushBatch(chunk);
+      accepted += result.okCount;
+      droppedTokens.push(...result.droppedTokens);
+      pushErrors.push(...(result.errors || []));
+      ticketEntries.push(...(result.ticketEntries || []));
+    } catch (error) {
+      console.error("[push] Expo push chunk failed:", error?.message || error);
+      pushErrors.push({
+        token: "",
+        message: String(error?.message || error || "Expo push chunk failed"),
+      });
+    }
+  }
+
+  let receiptCheckedCount = 0;
+
+  if (ticketEntries.length > 0) {
+    await wait(EXPO_PUSH_RECEIPT_WAIT_MS);
+    const receiptChunks = chunkArray(ticketEntries, EXPO_PUSH_RECEIPT_CHUNK_SIZE);
+
+    for (const receiptChunk of receiptChunks) {
+      try {
+        const receiptResult = await fetchExpoPushReceipts(receiptChunk);
+        receiptCheckedCount += receiptResult.checkedCount || 0;
+        droppedTokens.push(...(receiptResult.droppedTokens || []));
+        pushErrors.push(...(receiptResult.errors || []));
+      } catch (error) {
+        console.error("[push] Expo push receipt lookup failed:", error?.message || error);
+        pushErrors.push({
+          token: "",
+          ticketId: "",
+          message: String(error?.message || error || "Expo push receipt lookup failed"),
+        });
+      }
+    }
+  }
+
+  if (droppedTokens.length > 0) {
+    const removedCount = await removeUnregisteredPushTokens(droppedTokens);
+    console.log(`[push] Removed ${removedCount} stale push token(s) from user records.`);
+  }
+
+  return {
+    requested: messages.length,
+    accepted,
+    ticketCount: ticketEntries.length,
+    receiptCheckedCount,
+    dropped: droppedTokens.length,
+    droppedTokens,
+    errors: pushErrors,
+  };
+}
+
 async function sendBroadcastFeedPushNotification(kind, item) {
   const pushTokens = await listExpoPushTokens();
   const safeKind = kind === "news" ? "news" : "announcement";
@@ -1107,83 +1393,163 @@ async function sendBroadcastFeedPushNotification(kind, item) {
     priority: "high",
     channelId: "nearby-trucks",
   }));
-
-  const chunks = chunkArray(messages, EXPO_PUSH_CHUNK_SIZE);
-  let accepted = 0;
-  const droppedTokens = [];
-  const pushErrors = [];
-  const ticketEntries = [];
   console.log(
     `[push] Sending ${safeKind} broadcast for ${baseEvent.feedId || "unknown"} to ${messages.length} registered token(s).`
   );
-
-  for (const chunk of chunks) {
-    try {
-      const result = await sendExpoPushBatch(chunk);
-      accepted += result.okCount;
-      droppedTokens.push(...result.droppedTokens);
-      pushErrors.push(...(result.errors || []));
-      ticketEntries.push(...(result.ticketEntries || []));
-    } catch (error) {
-      console.error("[push] Expo push chunk failed:", error?.message || error);
-      pushErrors.push({
-        token: "",
-        message: String(error?.message || error || "Expo push chunk failed"),
-      });
-    }
-  }
-
-  let receiptCheckedCount = 0;
-
-  if (ticketEntries.length > 0) {
-    await wait(EXPO_PUSH_RECEIPT_WAIT_MS);
-    const receiptChunks = chunkArray(ticketEntries, EXPO_PUSH_RECEIPT_CHUNK_SIZE);
-
-    for (const receiptChunk of receiptChunks) {
-      try {
-        const receiptResult = await fetchExpoPushReceipts(receiptChunk);
-        receiptCheckedCount += receiptResult.checkedCount || 0;
-        droppedTokens.push(...(receiptResult.droppedTokens || []));
-        pushErrors.push(...(receiptResult.errors || []));
-      } catch (error) {
-        console.error("[push] Expo push receipt lookup failed:", error?.message || error);
-        pushErrors.push({
-          token: "",
-          ticketId: "",
-          message: String(error?.message || error || "Expo push receipt lookup failed"),
-        });
-      }
-    }
-  }
-
-  if (droppedTokens.length > 0) {
-    const removedCount = await removeUnregisteredPushTokens(droppedTokens);
-    console.log(`[push] Removed ${removedCount} stale push token(s) from user records.`);
-  }
+  const result = await deliverExpoPushMessages(messages);
 
   pushDiagnostics.lastBroadcast = snapshotPushDiagnosticEvent({
     ...baseEvent,
-    status: pushErrors.length > 0 && accepted === 0 ? "failed" : pushErrors.length > 0 ? "partial" : "ok",
-    requested: messages.length,
-    accepted,
-    ticketCount: ticketEntries.length,
-    receiptCheckedCount,
-    dropped: droppedTokens.length,
-    droppedTokenSamples: droppedTokens.slice(0, 5).map(maskPushToken),
-    errors: pushErrors.slice(0, 10),
+    status: result.errors.length > 0 && result.accepted === 0 ? "failed" : result.errors.length > 0 ? "partial" : "ok",
+    requested: result.requested,
+    accepted: result.accepted,
+    ticketCount: result.ticketCount,
+    receiptCheckedCount: result.receiptCheckedCount,
+    dropped: result.dropped,
+    droppedTokenSamples: result.droppedTokens.slice(0, 5).map(maskPushToken),
+    errors: result.errors.slice(0, 10),
   });
   console.log(
-    `[push] ${safeKind} broadcast result requested=${messages.length} accepted=${accepted} tickets=${ticketEntries.length} receipts=${receiptCheckedCount} dropped=${droppedTokens.length} errors=${pushErrors.length}`
+    `[push] ${safeKind} broadcast result requested=${result.requested} accepted=${result.accepted} tickets=${result.ticketCount} receipts=${result.receiptCheckedCount} dropped=${result.dropped} errors=${result.errors.length}`
   );
 
-  return {
-    requested: messages.length,
-    accepted,
-    ticketCount: ticketEntries.length,
-    receiptCheckedCount,
-    dropped: droppedTokens.length,
-    errors: pushErrors,
+  return result;
+}
+
+async function sendNearbyTruckAlertPushNotification(user, truck, distanceMeters) {
+  const pushTokens = collectUserExpoPushTokens(user);
+
+  if (pushTokens.length === 0) {
+    return {
+      requested: 0,
+      accepted: 0,
+      ticketCount: 0,
+      receiptCheckedCount: 0,
+      dropped: 0,
+      droppedTokens: [],
+      errors: [],
+    };
+  }
+
+  const truckStatus = String(truck?.status || "active").trim().toLowerCase();
+  const distanceLabel = formatDistanceMeters(distanceMeters);
+  const messages = pushTokens.map((pushToken) => ({
+    to: pushToken,
+    sound: "default",
+    title: `${String(truck?.truckId || "Garbage truck").trim()} is nearby`,
+    body: `A ${truckStatus} garbage truck is about ${distanceLabel} from your last synced location.`,
+    data: {
+      type: "nearby-truck",
+      truckId: String(truck?.truckId || "").trim(),
+      status: String(truck?.status || "").trim(),
+      distanceMeters: Math.max(1, Math.round(distanceMeters)),
+      screen: "Live Map",
+    },
+    priority: "high",
+    channelId: "nearby-trucks",
+  }));
+
+  return deliverExpoPushMessages(messages);
+}
+
+async function processNearbyTruckAlerts(truck) {
+  if (!truck?.truckId || !Number.isFinite(truck.latitude) || !Number.isFinite(truck.longitude)) {
+    return;
+  }
+
+  const eligibleUsers = await listUsersEligibleForNearbyTruckAlerts();
+  const summary = {
+    truckId: truck.truckId,
+    truckStatus: String(truck.status || "").trim(),
+    status: "no_match",
+    evaluatedUsers: eligibleUsers.length,
+    availableTokenCount: 0,
+    insideRadiusCount: 0,
+    alertedUsers: 0,
+    suppressedUsers: 0,
+    rearmedUsers: 0,
+    requested: 0,
+    accepted: 0,
+    ticketCount: 0,
+    receiptCheckedCount: 0,
+    dropped: 0,
+    errors: [],
   };
+
+  for (const user of eligibleUsers) {
+    const location = user?.nearbyAlertLocation;
+    const pushTokens = collectUserExpoPushTokens(user);
+    summary.availableTokenCount += pushTokens.length;
+
+    if (!location || pushTokens.length === 0) {
+      continue;
+    }
+
+    const distanceMeters = getDistanceMeters(location, truck);
+    const isInsideAlertZone = distanceMeters <= NEARBY_TRUCK_ALERT_RADIUS_METERS;
+    const isOutsideRearmZone = distanceMeters >= NEARBY_TRUCK_ALERT_REARM_METERS;
+    const existingState = getNearbyTruckState(user.id, truck.truckId);
+
+    if (isInsideAlertZone) {
+      summary.insideRadiusCount += 1;
+
+      if (existingState?.inside || existingState?.status === "sending") {
+        summary.suppressedUsers += 1;
+        continue;
+      }
+
+      setNearbyTruckState(user.id, truck.truckId, {
+        status: "sending",
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await sendNearbyTruckAlertPushNotification(user, truck, distanceMeters);
+      summary.requested += result.requested;
+      summary.accepted += result.accepted;
+      summary.ticketCount += result.ticketCount;
+      summary.receiptCheckedCount += result.receiptCheckedCount;
+      summary.dropped += result.dropped;
+      summary.errors.push(...result.errors);
+
+      if (result.accepted > 0) {
+        summary.alertedUsers += 1;
+        setNearbyTruckState(user.id, truck.truckId, {
+          status: "inside",
+          inside: true,
+          lastAlertAt: new Date().toISOString(),
+          lastDistanceMeters: Math.max(1, Math.round(distanceMeters)),
+        });
+      } else {
+        deleteNearbyTruckState(user.id, truck.truckId);
+      }
+
+      continue;
+    }
+
+    if (isOutsideRearmZone && existingState) {
+      deleteNearbyTruckState(user.id, truck.truckId);
+      summary.rearmedUsers += 1;
+    }
+  }
+
+  if (summary.alertedUsers > 0) {
+    summary.status = summary.errors.length > 0 && summary.accepted === 0 ? "failed" : summary.errors.length > 0 ? "partial" : "sent";
+  } else if (summary.insideRadiusCount > 0) {
+    summary.status = summary.suppressedUsers > 0 ? "suppressed" : "inside_no_delivery";
+  } else if (summary.rearmedUsers > 0) {
+    summary.status = "rearmed";
+  }
+
+  pushDiagnostics.lastNearbyTruckAlert = snapshotPushDiagnosticEvent({
+    ...summary,
+    errors: summary.errors.slice(0, 10),
+  });
+
+  console.log(
+    `[push] nearby truck ${truck.truckId} status=${summary.status} evaluated=${summary.evaluatedUsers} inside=${summary.insideRadiusCount} alerted=${summary.alertedUsers} suppressed=${summary.suppressedUsers} rearmed=${summary.rearmedUsers} requested=${summary.requested} accepted=${summary.accepted} dropped=${summary.dropped} errors=${summary.errors.length}`
+  );
+
+  return summary;
 }
 
 function isEmailSendingConfigured() {
@@ -1791,6 +2157,8 @@ app.get("/", (req, res) => {
       "POST /auth/change-password",
       "POST /users/push-token",
       "POST /users/push-token/remove",
+      "POST /users/nearby-alert-location",
+      "POST /users/nearby-alert-location/remove",
       "GET /trucks",
       "GET /schedule",
       "POST /report",
@@ -2894,6 +3262,55 @@ app.post(
   })
 );
 
+app.post(
+  "/users/nearby-alert-location",
+  authenticateRequest,
+  authorizeRoles(USER_ROLES.citizen),
+  asyncRoute(async (req, res) => {
+    const payload = normalizeNearbyAlertLocationPayload(req.body);
+
+    if (payload.error) {
+      res.status(400).json({
+        error: payload.error,
+      });
+      return;
+    }
+
+    const updated = await updateUserNearbyAlertLocation(req.user.id, payload);
+
+    if (!updated) {
+      res.status(404).json({
+        error: "Account not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Nearby alert location updated.",
+    });
+  })
+);
+
+app.post(
+  "/users/nearby-alert-location/remove",
+  authenticateRequest,
+  authorizeRoles(USER_ROLES.citizen),
+  asyncRoute(async (req, res) => {
+    const cleared = await clearUserNearbyAlertLocation(req.user.id);
+
+    if (!cleared) {
+      res.status(404).json({
+        error: "Account not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Nearby alert location cleared.",
+    });
+  })
+);
+
 app.get("/trucks", authenticateRequest, (req, res) => {
   res.json({
     user: req.user,
@@ -2970,6 +3387,9 @@ io.on("connection", (socket) => {
 
     const publicTruck = sanitizeTruck(truckRecord);
     io.emit("truck:updated", publicTruck);
+    processNearbyTruckAlerts(publicTruck).catch((error) => {
+      console.error(`[push] nearby truck alert processing failed for ${publicTruck.truckId}:`, error?.message || error);
+    });
 
     if (typeof acknowledge === "function") {
       acknowledge({
@@ -3005,6 +3425,7 @@ io.on("connection", (socket) => {
       return;
     }
 
+    clearNearbyTruckStateForTruck(removedTruck.truckId);
     io.emit("truck:removed", {
       truckId: removedTruck.truckId,
     });
@@ -3023,6 +3444,7 @@ io.on("connection", (socket) => {
       .filter((truck) => truck.ownerSocketId === socket.id)
       .forEach((truck) => {
         trucks.delete(truck.truckId);
+        clearNearbyTruckStateForTruck(truck.truckId);
         io.emit("truck:removed", {
           truckId: truck.truckId,
         });

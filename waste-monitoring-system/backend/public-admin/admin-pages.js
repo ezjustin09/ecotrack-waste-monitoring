@@ -1408,8 +1408,11 @@ async function renderPushDiagnostics() {
   const tokenSamplesNode = document.getElementById("pushTokenSamples");
   const lastRegistrationNode = document.getElementById("pushLastRegistration");
   const lastRemovalNode = document.getElementById("pushLastRemoval");
+  const lastLocationSyncNode = document.getElementById("pushLastLocationSync");
+  const lastNearbyTruckAlertNode = document.getElementById("pushLastNearbyTruckAlert");
   const lastBroadcastNode = document.getElementById("pushLastBroadcast");
   const lastErrorsNode = document.getElementById("pushLastErrors");
+  const lastNearbyErrorsNode = document.getElementById("pushLastNearbyErrors");
 
   if (
     !pushConfigStatusNode &&
@@ -1417,8 +1420,11 @@ async function renderPushDiagnostics() {
     !tokenSamplesNode &&
     !lastRegistrationNode &&
     !lastRemovalNode &&
+    !lastLocationSyncNode &&
+    !lastNearbyTruckAlertNode &&
     !lastBroadcastNode &&
-    !lastErrorsNode
+    !lastErrorsNode &&
+    !lastNearbyErrorsNode
   ) {
     return;
   }
@@ -1447,6 +1453,14 @@ async function renderPushDiagnostics() {
       lastRemovalNode.textContent = formatDiagnosticEvent(payload?.lastRemoval);
     }
 
+    if (lastLocationSyncNode) {
+      lastLocationSyncNode.textContent = formatDiagnosticEvent(payload?.lastLocationSync);
+    }
+
+    if (lastNearbyTruckAlertNode) {
+      lastNearbyTruckAlertNode.textContent = formatDiagnosticEvent(payload?.lastNearbyTruckAlert);
+    }
+
     if (lastBroadcastNode) {
       lastBroadcastNode.textContent = formatDiagnosticEvent(payload?.lastBroadcast);
     }
@@ -1454,6 +1468,12 @@ async function renderPushDiagnostics() {
     if (lastErrorsNode) {
       const errors = Array.isArray(payload?.lastBroadcast?.errors) ? payload.lastBroadcast.errors : [];
       lastErrorsNode.textContent = errors.length > 0 ? JSON.stringify(errors, null, 2) : "No push errors recorded";
+    }
+
+    if (lastNearbyErrorsNode) {
+      const errors = Array.isArray(payload?.lastNearbyTruckAlert?.errors) ? payload.lastNearbyTruckAlert.errors : [];
+      lastNearbyErrorsNode.textContent =
+        errors.length > 0 ? JSON.stringify(errors, null, 2) : "No nearby alert errors recorded";
     }
   } catch (error) {
     const fallbackMessage = error.message || "Unable to load push diagnostics.";
@@ -1478,12 +1498,24 @@ async function renderPushDiagnostics() {
       lastRemovalNode.textContent = fallbackMessage;
     }
 
+    if (lastLocationSyncNode) {
+      lastLocationSyncNode.textContent = fallbackMessage;
+    }
+
+    if (lastNearbyTruckAlertNode) {
+      lastNearbyTruckAlertNode.textContent = fallbackMessage;
+    }
+
     if (lastBroadcastNode) {
       lastBroadcastNode.textContent = fallbackMessage;
     }
 
     if (lastErrorsNode) {
       lastErrorsNode.textContent = fallbackMessage;
+    }
+
+    if (lastNearbyErrorsNode) {
+      lastNearbyErrorsNode.textContent = fallbackMessage;
     }
   }
 }

@@ -197,6 +197,26 @@ export async function unregisterPushToken(pushToken, token, platform = Platform.
   return parseJsonResponse(response);
 }
 
+export async function updateNearbyAlertLocation(location, token) {
+  const response = await fetch(`${API_BASE_URL}/users/nearby-alert-location`, {
+    method: "POST",
+    headers: buildHeaders(token),
+    body: JSON.stringify(location),
+  });
+
+  return parseJsonResponse(response);
+}
+
+export async function clearNearbyAlertLocation(token) {
+  const response = await fetch(`${API_BASE_URL}/users/nearby-alert-location/remove`, {
+    method: "POST",
+    headers: buildHeaders(token),
+    body: JSON.stringify({}),
+  });
+
+  return parseJsonResponse(response);
+}
+
 export async function getTrucks(token) {
   const response = await fetch(`${API_BASE_URL}/trucks`, {
     headers: buildHeaders(token),

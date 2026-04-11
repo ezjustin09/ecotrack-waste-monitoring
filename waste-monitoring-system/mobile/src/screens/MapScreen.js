@@ -18,16 +18,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import TruckMarker from "../components/TruckMarker";
 import { useAuth } from "../context/AuthContext";
 import { usePreferences } from "../context/PreferencesContext";
-import { getTrucks } from "../services/api";
+import { updateNearbyAlertLocation, getTrucks } from "../services/api";
 import {
   ALERT_RADIUS_METERS,
-  ALERT_REARM_METERS,
   clearNearbyTruckNotificationsAsync,
   enableNearbyTruckAlertsAsync,
   formatDistanceMeters,
   getDistanceMeters,
   getNearbyTruckAlertsStatusAsync,
-  sendNearbyTruckNotificationAsync,
 } from "../services/notifications";
 import { createTruckSocket } from "../services/socket";
 import { MAP_STYLE } from "../utils/mapTheme";
@@ -131,7 +129,7 @@ export default function MapScreen() {
   const { feedNotificationsEnabled, setFeedNotificationsEnabled } = usePreferences();
   const mapRef = useRef(null);
   const fittedOnceRef = useRef(false);
-  const nearbyTruckIdsRef = useRef(new Set());
+  const lastSyncedAlertLocationRef = useRef(null);
   const sheetTranslateY = useRef(new Animated.Value(0)).current;
   const dragStartOffsetRef = useRef(0);
   const [trucks, setTrucks] = useState([]);
@@ -359,7 +357,7 @@ export default function MapScreen() {
 
   async function toggleNearbyAlerts() {
     if (alertsEnabled) {
-      nearbyTruckIdsRef.current.clear();
+      lastSyncedAlertLocationRef.current = null;
       clearNearbyTruckNotificationsAsync().catch(() => {});
       setFeedNotificationsEnabled(false).catch(() => {});
       return;
@@ -446,47 +444,57 @@ export default function MapScreen() {
 
   useEffect(() => {
     if (!alertsEnabled) {
-      nearbyTruckIdsRef.current.clear();
+      lastSyncedAlertLocationRef.current = null;
       clearNearbyTruckNotificationsAsync().catch(() => {});
     }
   }, [alertsEnabled]);
 
   useEffect(() => {
-    if (!alertsEnabled || !userLocation || trucks.length === 0) {
-      if (trucks.length === 0) {
-        nearbyTruckIdsRef.current.clear();
-        clearNearbyTruckNotificationsAsync().catch(() => {});
-      }
+    if (!alertsEnabled || !token || !userLocation) {
       return;
     }
 
-    const trackedTruckIds = nearbyTruckIdsRef.current;
-    const liveTruckIds = new Set(trucks.map((truck) => truck.truckId));
+    const previousSync = lastSyncedAlertLocationRef.current;
+    const distanceFromPreviousSync = previousSync ? getDistanceMeters(previousSync, userLocation) : Number.POSITIVE_INFINITY;
+    const syncedRecently = previousSync ? Date.now() - previousSync.syncedAt < 60000 : false;
 
-    trucks.forEach((truck) => {
-      const distanceMeters = getDistanceMeters(userLocation, truck);
-      const isInsideAlertZone = distanceMeters <= ALERT_RADIUS_METERS;
-      const isOutsideRearmZone = distanceMeters >= ALERT_REARM_METERS;
+    if (distanceFromPreviousSync < 20 && syncedRecently) {
+      return;
+    }
 
-      if (isInsideAlertZone && !trackedTruckIds.has(truck.truckId)) {
-        trackedTruckIds.add(truck.truckId);
-        sendNearbyTruckNotificationAsync(truck, distanceMeters).catch((error) => {
-          console.log("Unable to send nearby truck notification:", error.message);
-        });
-        return;
-      }
+    let isActive = true;
 
-      if (isOutsideRearmZone && trackedTruckIds.has(truck.truckId)) {
-        trackedTruckIds.delete(truck.truckId);
-      }
-    });
+    updateNearbyAlertLocation(
+      {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        source: "map-screen",
+      },
+      token
+    )
+      .then(() => {
+        if (!isActive) {
+          return;
+        }
 
-    Array.from(trackedTruckIds).forEach((truckId) => {
-      if (!liveTruckIds.has(truckId)) {
-        trackedTruckIds.delete(truckId);
-      }
-    });
-  }, [alertsEnabled, trucks, userLocation]);
+        lastSyncedAlertLocationRef.current = {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          syncedAt: Date.now(),
+        };
+      })
+      .catch((error) => {
+        if (handleAuthError(error.message)) {
+          return;
+        }
+
+        console.log("Unable to sync nearby truck alert location:", error.message);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [alertsEnabled, token, userLocation]);
 
   if (loading) {
     return (

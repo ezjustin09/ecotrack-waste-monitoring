@@ -11,7 +11,7 @@ import AuthScreen from "./src/screens/AuthScreen";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import { AuthProvider } from "./src/context/AuthContext";
 import { PreferencesProvider, usePreferences } from "./src/context/PreferencesContext";
-import { registerPushToken, unregisterPushToken } from "./src/services/api";
+import { clearNearbyAlertLocation, registerPushToken, unregisterPushToken } from "./src/services/api";
 import { getExpoPushTokenForServerAsync, sendFeedNotificationAsync } from "./src/services/notifications";
 import { createTruckSocket } from "./src/services/socket";
 import { buildNavigationTheme } from "./src/utils/appTheme";
@@ -92,6 +92,17 @@ function AppShell() {
   }
 
   function handleSignOut() {
+    const activeSessionToken = session?.token || "";
+    const activePushToken = currentPushTokenRef.current;
+
+    if (activeSessionToken) {
+      if (activePushToken) {
+        unregisterPushToken(activePushToken, activeSessionToken).catch(() => {});
+      }
+
+      clearNearbyAlertLocation(activeSessionToken).catch(() => {});
+    }
+
     lastRegisteredPushTokenRef.current = "";
     currentPushTokenRef.current = "";
     setSession(null);
@@ -128,11 +139,15 @@ function AppShell() {
             currentPushTokenRef.current || (await getExpoPushTokenForServerAsync({ requestPermission: false }));
 
           if (!active || !currentPushToken) {
+            await clearNearbyAlertLocation(authValue.token).catch(() => {});
             lastRegisteredPushTokenRef.current = "";
             return;
           }
 
-          await unregisterPushToken(currentPushToken, authValue.token).catch(() => {});
+          await Promise.allSettled([
+            unregisterPushToken(currentPushToken, authValue.token),
+            clearNearbyAlertLocation(authValue.token),
+          ]);
           currentPushTokenRef.current = "";
           lastRegisteredPushTokenRef.current = "";
           return;
