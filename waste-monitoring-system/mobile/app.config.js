@@ -1,6 +1,82 @@
-const appJson = require("./app.json");
 const fs = require("fs");
 const path = require("path");
+
+const baseConfig = {
+  name: "EcoTrack: Waste Monitoring System for Pateros",
+  slug: "waste-monitoring-system",
+  scheme: [
+    "wastemonitoring",
+    "com.googleusercontent.apps.457539763720-hqdpqbb4nigrn3mo7nib75h9akfb13hi",
+    "com.googleusercontent.apps.457539763720-nhc77i2p6cc2gqb0kt0jgu70bpdid2kp",
+  ],
+  version: "1.0.0",
+  orientation: "portrait",
+  userInterfaceStyle: "light",
+  icon: "./assets/icon.png",
+  splash: {
+    image: "./assets/splash-logo.png",
+    resizeMode: "contain",
+    backgroundColor: "#f3f7f6",
+  },
+  assetBundlePatterns: ["**/*"],
+  ios: {
+    supportsTablet: true,
+    bundleIdentifier: "com.ecotrack.wastemonitoring",
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+    },
+  },
+  android: {
+    package: "com.ecotrack.wastemonitoring",
+    adaptiveIcon: {
+      foregroundImage: "./assets/adaptive-icon.png",
+      backgroundColor: "#0e6b2d",
+    },
+    permissions: [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.POST_NOTIFICATIONS",
+    ],
+  },
+  plugins: [
+    "expo-font",
+    "expo-web-browser",
+    [
+      "expo-dev-client",
+      {
+        launchMode: "most-recent",
+      },
+    ],
+    [
+      "expo-location",
+      {
+        locationWhenInUsePermission:
+          "Allow EcoTrack: Waste Monitoring System for Pateros to access your location for reporting illegal dumping.",
+      },
+    ],
+    [
+      "expo-image-picker",
+      {
+        photosPermission:
+          "Allow EcoTrack: Waste Monitoring System for Pateros to access your photos so you can attach issue evidence.",
+        cameraPermission:
+          "Allow EcoTrack: Waste Monitoring System for Pateros to access your camera so you can capture issue evidence.",
+      },
+    ],
+    [
+      "expo-notifications",
+      {
+        color: "#0f766e",
+      },
+    ],
+  ],
+  extra: {
+    eas: {
+      projectId: "fc73b21b-24ed-41f4-b57c-2164ba106509",
+    },
+  },
+};
 
 function firstNonEmptyEnv(...names) {
   for (const name of names) {
@@ -15,7 +91,6 @@ function firstNonEmptyEnv(...names) {
 }
 
 module.exports = ({ config }) => {
-  const baseConfig = appJson.expo;
   const androidGoogleMapsApiKey = firstNonEmptyEnv(
     "GOOGLE_MAPS_ANDROID_API_KEY",
     "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY"
