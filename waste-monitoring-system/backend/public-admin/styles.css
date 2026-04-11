@@ -503,6 +503,8 @@ body.admin-nav-open {
   padding: 0;
   display: grid;
   gap: 8px;
+  max-height: 360px;
+  overflow: auto;
 }
 
 .activity-list li {
@@ -748,7 +750,8 @@ th {
   }
 
   .admin-live-map {
-    min-height: 280px;
+    min-height: 220px;
+    height: min(34vh, 280px);
   }
 
   .schedule-form-actions,
@@ -756,6 +759,66 @@ th {
   .schedule-item-actions,
   .auth-row {
     flex-wrap: wrap;
+  }
+
+  .recent-activity-panel {
+    min-height: 220px;
+  }
+
+  .recent-activity-panel .activity-list {
+    max-height: 200px;
+    gap: 6px;
+  }
+
+  .truck-activity-panel .table-wrap {
+    overflow: visible;
+  }
+
+  .truck-activity-table {
+    min-width: 0;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+  }
+
+  .truck-activity-table thead {
+    display: none;
+  }
+
+  .truck-activity-table tbody,
+  .truck-activity-table tr,
+  .truck-activity-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .truck-activity-table tr {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #f8fafc;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+  }
+
+  .truck-activity-table td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 8px 12px;
+    font-size: 12px;
+    white-space: normal;
+  }
+
+  .truck-activity-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .truck-activity-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--slate-500);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .stat-grid {
@@ -848,6 +911,7 @@ th {
 .admin-live-map {
   width: 100%;
   min-height: 360px;
+  height: min(46vh, 420px);
   border-radius: 10px;
   border: 1px solid #dbe4de;
   overflow: hidden;

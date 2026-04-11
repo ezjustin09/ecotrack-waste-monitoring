@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Dashboard</title>
-    <link rel="stylesheet" href="/admin/styles.css?v=20260411c" />
+    <link rel="stylesheet" href="/admin/styles.css?v=20260411d" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   </head>
   <body data-page="dashboard">
@@ -79,7 +79,7 @@
         </section>
 
         <section class="content-grid">
-          <article class="card panel panel-wide">
+          <article class="card panel panel-wide map-panel">
             <div class="panel-heading">
               <h2>Live Truck Map</h2>
               <div class="panel-actions">
@@ -91,7 +91,7 @@
             <p id="mapStatus" class="map-status"></p>
           </article>
 
-          <article class="card panel">
+          <article class="card panel recent-activity-panel">
             <div class="panel-heading">
               <h2>Recent Activity</h2>
               <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
@@ -99,12 +99,12 @@
             <ul id="recentActivity" class="activity-list"></ul>
           </article>
 
-          <article class="card panel panel-wide">
+          <article class="card panel panel-wide truck-activity-panel">
             <div class="panel-heading">
               <h2>Garbage Truck Activity</h2>
             </div>
             <div class="table-wrap">
-              <table>
+              <table class="truck-activity-table">
                 <thead>
                   <tr>
                     <th>Truck ID</th>
@@ -123,6 +123,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/admin/admin-pages.js?v=20260411b" defer></script>
+    <script src="/admin/admin-pages.js?v=20260411d" defer></script>
   </body>
 </html>

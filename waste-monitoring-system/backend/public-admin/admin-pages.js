@@ -428,10 +428,10 @@ function renderTrucks(trucks = []) {
         : "-";
       return `
         <tr>
-          <td>${truck.truckId}</td>
-          <td>${truck.status || "Unknown"}</td>
-          <td>${coords}</td>
-          <td>${formatDateTime(truck.updatedAt)}</td>
+          <td data-label="Truck ID">${truck.truckId}</td>
+          <td data-label="Status">${truck.status || "Unknown"}</td>
+          <td data-label="Coordinates">${coords}</td>
+          <td data-label="Last Updated">${formatDateTime(truck.updatedAt)}</td>
         </tr>
       `;
     })
