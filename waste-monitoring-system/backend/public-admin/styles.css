@@ -575,14 +575,6 @@ body.admin-nav-open {
   min-width: 860px;
 }
 
-.table-scroll-hint {
-  display: none;
-  margin: 0;
-  color: var(--slate-500);
-  font-size: 12px;
-  font-weight: 600;
-}
-
 table {
   width: 100%;
   border-collapse: collapse;
@@ -802,10 +794,6 @@ th {
   .panel-heading {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .table-scroll-hint {
-    display: block;
   }
 
   .scroll-table-wrap {
