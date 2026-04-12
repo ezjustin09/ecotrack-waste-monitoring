@@ -64,14 +64,26 @@ body.admin-nav-open {
   margin: 0;
   font-size: 40px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.auth-brand h1 span {
+.auth-brand h1 span:not(.logo-mark) {
   color: #fbbf24;
 }
 
 .logo-mark {
-  margin-right: 6px;
+  display: inline-block;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  background: url("/admin/assets/splash-logo.png") center / contain no-repeat;
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+  vertical-align: middle;
 }
 
 .auth-brand p {
@@ -206,9 +218,12 @@ body.admin-nav-open {
   margin: 0;
   font-size: 34px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.brand-block h2 span {
+.brand-block h2 span:not(.logo-mark) {
   color: #fbbf24;
 }
 
@@ -845,6 +860,7 @@ th {
 
   .auth-brand h1 {
     font-size: 34px;
+    gap: 8px;
   }
 
   .auth-form {

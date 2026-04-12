@@ -57,6 +57,7 @@ const HOST = process.env.HOST || "0.0.0.0";
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017";
 const MONGODB_DB = process.env.MONGODB_DB || "waste_monitoring_system";
 const ADMIN_PUBLIC_DIR = path.join(__dirname, "public-admin");
+const MOBILE_ASSETS_DIR = path.join(__dirname, "..", "mobile", "assets");
 const ADMIN_STATIC_CACHE_CONTROL = "no-store, no-cache, must-revalidate, proxy-revalidate";
 
 const USER_ROLES = {
@@ -3421,6 +3422,10 @@ app.get("/admin", (req, res) => {
 
 app.get("/admin/", (req, res) => {
   res.sendFile(path.join(ADMIN_PUBLIC_DIR, "index.html"));
+});
+
+app.get("/admin/assets/splash-logo.png", (req, res) => {
+  res.sendFile(path.join(MOBILE_ASSETS_DIR, "splash-logo.png"));
 });
 
 app.use(
