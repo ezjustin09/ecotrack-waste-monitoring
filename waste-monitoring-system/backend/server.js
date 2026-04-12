@@ -3545,6 +3545,8 @@ app.post(
       return;
     }
 
+    console.log("[auth] Forgot-password request received for " + forgot.email);
+
     if (IS_PRODUCTION && !isEmailSendingConfigured()) {
       res.status(503).json({
         error: "Password reset email is not configured on the server.",

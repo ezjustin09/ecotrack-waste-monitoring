@@ -102,6 +102,7 @@ export default function AuthScreen({ onAuthenticated }) {
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotCodeRequested, setForgotCodeRequested] = useState(false);
   const heroOpacity = useRef(new Animated.Value(0)).current;
   const heroTranslateY = useRef(new Animated.Value(28)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
@@ -168,6 +169,11 @@ export default function AuthScreen({ onAuthenticated }) {
   const activeForm = forms[mode];
   const isBusy = submitting || googleSubmitting;
   const isNetworkError = errorMessage === "Network request failed";
+  const shouldShowForgotResetFields =
+    isForgotMode &&
+    (forgotCodeRequested ||
+      Boolean(String(forms.forgot.code || "").trim()) ||
+      Boolean(String(forms.forgot.newPassword || "").trim()));
   const secondaryOrbScale = orbScale.interpolate({
     inputRange: [1, 1.08],
     outputRange: [1.08, 0.96],
@@ -195,11 +201,11 @@ export default function AuthScreen({ onAuthenticated }) {
 
   const submitLabel = useMemo(() => {
     if (isForgotMode) {
-      return "Reset Password";
+      return shouldShowForgotResetFields ? "Reset Password" : "Send Reset Code";
     }
 
     return isLoginMode ? "Log In" : "Create Account";
-  }, [isForgotMode, isLoginMode]);
+  }, [isForgotMode, isLoginMode, shouldShowForgotResetFields]);
 
   useEffect(() => {
     Animated.parallel([
@@ -264,6 +270,14 @@ export default function AuthScreen({ onAuthenticated }) {
     setShowPassword(false);
     setErrorMessage("");
     setInfoMessage("");
+
+    if (nextMode !== "forgot") {
+      setForgotCodeRequested(false);
+    } else {
+      setForgotCodeRequested(
+        Boolean(String(forms.forgot.code || "").trim()) || Boolean(String(forms.forgot.newPassword || "").trim())
+      );
+    }
   }
 
   function updateForm(formKey, field, value) {
@@ -383,6 +397,7 @@ export default function AuthScreen({ onAuthenticated }) {
     try {
       const response = await requestPasswordReset(email);
       const responseCode = String(response?.resetCode || "");
+      setForgotCodeRequested(true);
 
       if (responseCode) {
         updateForm("forgot", "code", responseCode);
@@ -425,6 +440,11 @@ export default function AuthScreen({ onAuthenticated }) {
         return;
       }
 
+      if (!shouldShowForgotResetFields) {
+        await handleRequestResetCode();
+        return;
+      }
+
       await resetPassword({
         email: String(forms.forgot.email || "").trim(),
         code: String(forms.forgot.code || "").trim(),
@@ -445,6 +465,7 @@ export default function AuthScreen({ onAuthenticated }) {
           newPassword: "",
         },
       }));
+      setForgotCodeRequested(false);
       setShowPassword(false);
       setMode("login");
     } catch (error) {
@@ -522,38 +543,42 @@ export default function AuthScreen({ onAuthenticated }) {
 
           {isForgotMode ? (
             <>
-              <Text style={styles.label}>Reset Code</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter 6-digit code"
-                placeholderTextColor="#94a3b8"
-                keyboardType="number-pad"
-                value={forms.forgot.code}
-                onChangeText={(value) => updateForm("forgot", "code", value)}
-              />
+              {shouldShowForgotResetFields ? (
+                <>
+                  <Text style={styles.label}>Reset Code</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter 6-digit code"
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="number-pad"
+                    value={forms.forgot.code}
+                    onChangeText={(value) => updateForm("forgot", "code", value)}
+                  />
 
-              <Text style={styles.label}>New Password</Text>
-              <View style={styles.passwordField}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Enter your new password"
-                  placeholderTextColor="#94a3b8"
-                  secureTextEntry={!showPassword}
-                  value={forms.forgot.newPassword}
-                  onChangeText={(value) => updateForm("forgot", "newPassword", value)}
-                />
-                <Pressable
-                  style={styles.passwordIconButton}
-                  onPress={() => setShowPassword((current) => !current)}
-                  hitSlop={8}
-                >
-                  <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#64748b" />
-                </Pressable>
-              </View>
+                  <Text style={styles.label}>New Password</Text>
+                  <View style={styles.passwordField}>
+                    <TextInput
+                      style={styles.passwordInput}
+                      placeholder="Enter your new password"
+                      placeholderTextColor="#94a3b8"
+                      secureTextEntry={!showPassword}
+                      value={forms.forgot.newPassword}
+                      onChangeText={(value) => updateForm("forgot", "newPassword", value)}
+                    />
+                    <Pressable
+                      style={styles.passwordIconButton}
+                      onPress={() => setShowPassword((current) => !current)}
+                      hitSlop={8}
+                    >
+                      <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#64748b" />
+                    </Pressable>
+                  </View>
 
-              <Pressable style={styles.secondaryButton} onPress={handleRequestResetCode} disabled={isBusy}>
-                <Text style={styles.secondaryButtonText}>Send Reset Code</Text>
-              </Pressable>
+                  <Pressable style={styles.secondaryButton} onPress={handleRequestResetCode} disabled={isBusy}>
+                    <Text style={styles.secondaryButtonText}>Send Reset Code Again</Text>
+                  </Pressable>
+                </>
+              ) : null}
 
               <Pressable style={styles.forgotLinkButton} onPress={() => switchMode("login")}>
                 <Text style={styles.forgotLinkText}>Back to login</Text>
