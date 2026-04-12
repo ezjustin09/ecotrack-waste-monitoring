@@ -264,6 +264,8 @@ const DEFAULT_NEWS_ITEMS = [
   },
 ];
 
+const TRIP_TICKET_STATUSES = ["Scheduled", "On Route", "Completed", "Delayed", "Missed"];
+
 const DEFAULT_TRIP_TICKET_TEMPLATES = [
   {
     id: "TT-001",
@@ -584,6 +586,11 @@ async function nextNewsId() {
   return `NEWS-${String(sequence).padStart(3, "0")}`;
 }
 
+async function nextTripTicketId() {
+  const sequence = await nextSequence("trip_ticket");
+  return `TT-${String(sequence).padStart(3, "0")}`;
+}
+
 async function getScheduleList() {
   const rows = await schedulesCollection.find({}).sort({ id: 1 }).toArray();
   return rows.map(sanitizeSchedule);
@@ -902,6 +909,10 @@ function validateProductionConfiguration() {
 
 async function findDriverById(driverId) {
   return usersCollection.findOne({ id: driverId, role: USER_ROLES.driver });
+}
+
+async function findTripTicketById(ticketId) {
+  return tripTicketsCollection.findOne({ id: ticketId });
 }
 
 async function getDriverList() {
@@ -2041,6 +2052,84 @@ function normalizeFeedPayload(payload = {}) {
   };
 }
 
+function normalizeTripTicketPayload(payload = {}) {
+  const truckId = normalizeTruckId(payload.truckId);
+  const driverName = String(payload.driverName || "").trim();
+  const zone = String(payload.zone || "").trim();
+  const wasteType = String(payload.wasteType || "").trim();
+  const scheduledWindow = String(payload.scheduledWindow || "").trim();
+  const remarks = String(payload.remarks || "").trim();
+  const status = String(payload.status || "Scheduled").trim() || "Scheduled";
+  const rawVolumeKg = payload.volumeKg;
+  const volumeKg =
+    rawVolumeKg === "" || rawVolumeKg === null || typeof rawVolumeKg === "undefined"
+      ? 0
+      : Number(rawVolumeKg);
+  const departureAt = payload.departureAt ? new Date(payload.departureAt) : null;
+  const completedAt = payload.completedAt ? new Date(payload.completedAt) : null;
+
+  if (!truckId || !driverName || !zone || !wasteType || !scheduledWindow || !departureAt) {
+    return {
+      error: "truckId, driverName, zone, wasteType, scheduledWindow, and departureAt are required",
+    };
+  }
+
+  if (isBlockedTruckId(truckId)) {
+    return {
+      error: "TRUCK-001 is reserved and cannot be used",
+    };
+  }
+
+  if (Number.isNaN(departureAt.getTime())) {
+    return {
+      error: "departureAt must be a valid date and time",
+    };
+  }
+
+  if (completedAt && Number.isNaN(completedAt.getTime())) {
+    return {
+      error: "completedAt must be a valid date and time",
+    };
+  }
+
+  if (!TRIP_TICKET_STATUSES.includes(status)) {
+    return {
+      error: `status must be one of: ${TRIP_TICKET_STATUSES.join(", ")}`,
+    };
+  }
+
+  if (!Number.isFinite(volumeKg) || volumeKg < 0) {
+    return {
+      error: "volumeKg must be a valid positive number",
+    };
+  }
+
+  if (completedAt && completedAt.getTime() <= departureAt.getTime()) {
+    return {
+      error: "completedAt must be later than departureAt",
+    };
+  }
+
+  if ((status === "Completed" || status === "Delayed") && !completedAt) {
+    return {
+      error: "completedAt is required for completed or delayed trip tickets",
+    };
+  }
+
+  return {
+    truckId,
+    driverName,
+    zone,
+    wasteType,
+    scheduledWindow,
+    departureAt,
+    completedAt,
+    status,
+    volumeKg,
+    remarks,
+  };
+}
+
 function normalizeSignupPayload(payload = {}) {
   const name = String(payload.name || "").trim();
   const email = normalizeEmail(payload.email);
@@ -2477,6 +2566,10 @@ app.get("/", (req, res) => {
       "POST /admin/drivers",
       "PUT /admin/drivers/:id",
       "DELETE /admin/drivers/:id",
+      "GET /admin/trip-tickets",
+      "POST /admin/trip-tickets",
+      "PUT /admin/trip-tickets/:id",
+      "DELETE /admin/trip-tickets/:id",
       "GET /admin/announcements",
       "POST /admin/announcements",
       "PUT /admin/announcements/:id",
@@ -2879,6 +2972,161 @@ app.delete(
     res.status(200).json({
       message: "Driver account deleted successfully.",
       id: driverId,
+    });
+  })
+);
+
+app.get(
+  "/admin/trip-tickets",
+  authenticateAdminRequest,
+  asyncRoute(async (req, res) => {
+    const tripTickets = await getTripTicketList();
+
+    res.json({
+      tripTickets,
+      tripAnalytics: buildTripTicketAnalytics(tripTickets),
+    });
+  })
+);
+
+app.post(
+  "/admin/trip-tickets",
+  authenticateAdminRequest,
+  asyncRoute(async (req, res) => {
+    const payload = normalizeTripTicketPayload(req.body);
+
+    if (payload.error) {
+      res.status(400).json({
+        error: payload.error,
+      });
+      return;
+    }
+
+    const tripTicket = {
+      id: await nextTripTicketId(),
+      truckId: payload.truckId,
+      driverName: payload.driverName,
+      zone: payload.zone,
+      wasteType: payload.wasteType,
+      scheduledWindow: payload.scheduledWindow,
+      departureAt: payload.departureAt,
+      completedAt: payload.completedAt || null,
+      status: payload.status,
+      volumeKg: payload.volumeKg,
+      remarks: payload.remarks,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await tripTicketsCollection.insertOne(tripTicket);
+    const publicTripTicket = sanitizeTripTicket(tripTicket);
+    io.emit("trip-ticket:created", publicTripTicket);
+
+    res.status(201).json({
+      message: "Trip ticket created successfully.",
+      tripTicket: publicTripTicket,
+    });
+  })
+);
+
+app.put(
+  "/admin/trip-tickets/:id",
+  authenticateAdminRequest,
+  asyncRoute(async (req, res) => {
+    const tripTicketId = String(req.params.id || "").trim().toUpperCase();
+
+    if (!tripTicketId) {
+      res.status(400).json({
+        error: "trip ticket id is required",
+      });
+      return;
+    }
+
+    const existingTripTicket = await findTripTicketById(tripTicketId);
+    if (!existingTripTicket) {
+      res.status(404).json({
+        error: "Trip ticket not found",
+      });
+      return;
+    }
+
+    const payload = normalizeTripTicketPayload(req.body);
+
+    if (payload.error) {
+      res.status(400).json({
+        error: payload.error,
+      });
+      return;
+    }
+
+    const updateResult = await tripTicketsCollection.findOneAndUpdate(
+      { id: tripTicketId },
+      {
+        $set: {
+          truckId: payload.truckId,
+          driverName: payload.driverName,
+          zone: payload.zone,
+          wasteType: payload.wasteType,
+          scheduledWindow: payload.scheduledWindow,
+          departureAt: payload.departureAt,
+          completedAt: payload.completedAt || null,
+          status: payload.status,
+          volumeKg: payload.volumeKg,
+          remarks: payload.remarks,
+          updatedAt: new Date(),
+        },
+      },
+      { returnDocument: "after" }
+    );
+
+    const updatedTripTicket = updateResult?.value || updateResult;
+
+    if (!updatedTripTicket) {
+      res.status(404).json({
+        error: "Trip ticket not found",
+      });
+      return;
+    }
+
+    const publicTripTicket = sanitizeTripTicket(updatedTripTicket);
+    io.emit("trip-ticket:updated", publicTripTicket);
+
+    res.status(200).json({
+      message: "Trip ticket updated successfully.",
+      tripTicket: publicTripTicket,
+    });
+  })
+);
+
+app.delete(
+  "/admin/trip-tickets/:id",
+  authenticateAdminRequest,
+  asyncRoute(async (req, res) => {
+    const tripTicketId = String(req.params.id || "").trim().toUpperCase();
+
+    if (!tripTicketId) {
+      res.status(400).json({
+        error: "trip ticket id is required",
+      });
+      return;
+    }
+
+    const deleteResult = await tripTicketsCollection.deleteOne({ id: tripTicketId });
+
+    if (!deleteResult.deletedCount) {
+      res.status(404).json({
+        error: "Trip ticket not found",
+      });
+      return;
+    }
+
+    io.emit("trip-ticket:deleted", {
+      id: tripTicketId,
+    });
+
+    res.status(200).json({
+      message: "Trip ticket deleted successfully.",
+      id: tripTicketId,
     });
   })
 );

@@ -7,6 +7,7 @@ const state = {
   searchTerm: "",
   isLoading: false,
   drivers: [],
+  tripTickets: [],
   map: {
     instance: null,
     markers: new Map(),
@@ -43,6 +44,20 @@ function formatDateTime(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatDateTimeInputValue(value) {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const localDate = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 16);
 }
 
 function formatCount(value) {
@@ -881,6 +896,336 @@ function renderTripTicketAnalytics(payload = {}) {
   }
 }
 
+function renderTripTicketDriverOptions() {
+  const driverOptionsNode = document.getElementById("tripTicketDriverOptions");
+  const truckOptionsNode = document.getElementById("tripTicketTruckOptions");
+
+  if (!driverOptionsNode && !truckOptionsNode) {
+    return;
+  }
+
+  const drivers = Array.isArray(state.drivers) ? state.drivers : [];
+
+  if (driverOptionsNode) {
+    driverOptionsNode.innerHTML = drivers
+      .map(
+        (driver) =>
+          `<option value="${driver.name}" label="${[driver.truckId, driver.email].filter(Boolean).join(" - ")}"></option>`
+      )
+      .join("");
+  }
+
+  if (truckOptionsNode) {
+    const truckIds = Array.from(
+      new Set(
+        [
+          ...drivers.map((driver) => String(driver.truckId || "").trim()).filter(Boolean),
+          ...state.tripTickets.map((ticket) => String(ticket.truckId || "").trim()).filter(Boolean),
+        ].sort()
+      )
+    );
+
+    truckOptionsNode.innerHTML = truckIds.map((truckId) => `<option value="${truckId}"></option>`).join("");
+  }
+}
+
+function renderTripTicketManagement(tripTickets = []) {
+  const tableBody = document.getElementById("tripTicketManagementTableBody");
+  if (!tableBody) {
+    return;
+  }
+
+  const filtered = filterBySearch(tripTickets, [
+    (ticket) => ticket.id,
+    (ticket) => ticket.truckId,
+    (ticket) => ticket.driverName,
+    (ticket) => ticket.zone,
+    (ticket) => ticket.wasteType,
+    (ticket) => ticket.scheduledWindow,
+    (ticket) => ticket.status,
+    (ticket) => ticket.remarks,
+  ]);
+
+  if (!filtered.length) {
+    tableBody.innerHTML = '<tr><td colspan="10" class="empty">No trip ticket matches your search.</td></tr>';
+    return;
+  }
+
+  tableBody.innerHTML = filtered
+    .map((ticket) => {
+      const statusMeta = [formatKilograms(ticket.volumeKg), formatDurationMinutes(ticket.durationMinutes)]
+        .filter((value) => value && value !== "-")
+        .join(" • ");
+
+      return `
+        <tr>
+          <td>${ticket.id}</td>
+          <td>${ticket.truckId || "-"}</td>
+          <td>${ticket.driverName || "-"}</td>
+          <td>${ticket.zone || "-"}</td>
+          <td>${ticket.wasteType || "-"}${ticket.remarks ? `<br /><small>${truncate(ticket.remarks, 44)}</small>` : ""}</td>
+          <td>${ticket.scheduledWindow || "-"}</td>
+          <td>${formatDateTime(ticket.departureAt)}</td>
+          <td>${ticket.completedAt ? formatDateTime(ticket.completedAt) : "-"}</td>
+          <td>${ticket.status || "-"}${statusMeta ? `<br /><small>${statusMeta}</small>` : ""}</td>
+          <td>
+            <div class="table-actions">
+              <button type="button" class="schedule-edit-btn" data-trip-ticket-action="edit" data-trip-ticket-id="${ticket.id}">Edit</button>
+              <button type="button" class="schedule-delete-btn" data-trip-ticket-action="delete" data-trip-ticket-id="${ticket.id}">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function setTripTicketForm(ticket = null) {
+  const idInput = document.getElementById("tripTicketEditingId");
+  const truckIdInput = document.getElementById("tripTicketTruckId");
+  const driverNameInput = document.getElementById("tripTicketDriverName");
+  const zoneInput = document.getElementById("tripTicketZone");
+  const wasteTypeInput = document.getElementById("tripTicketWasteType");
+  const scheduledWindowInput = document.getElementById("tripTicketScheduledWindow");
+  const departureAtInput = document.getElementById("tripTicketDepartureAt");
+  const completedAtInput = document.getElementById("tripTicketCompletedAt");
+  const statusInput = document.getElementById("tripTicketStatus");
+  const volumeKgInput = document.getElementById("tripTicketVolumeKg");
+  const remarksInput = document.getElementById("tripTicketRemarks");
+  const saveButton = document.getElementById("tripTicketSaveButton");
+
+  if (
+    !idInput ||
+    !truckIdInput ||
+    !driverNameInput ||
+    !zoneInput ||
+    !wasteTypeInput ||
+    !scheduledWindowInput ||
+    !departureAtInput ||
+    !completedAtInput ||
+    !statusInput ||
+    !volumeKgInput ||
+    !remarksInput
+  ) {
+    return;
+  }
+
+  if (!ticket) {
+    idInput.value = "";
+    truckIdInput.value = "";
+    driverNameInput.value = "";
+    zoneInput.value = "";
+    wasteTypeInput.value = "";
+    scheduledWindowInput.value = "";
+    departureAtInput.value = "";
+    completedAtInput.value = "";
+    statusInput.value = "Scheduled";
+    volumeKgInput.value = "";
+    remarksInput.value = "";
+    if (saveButton) {
+      saveButton.textContent = "Save Trip Ticket";
+    }
+    return;
+  }
+
+  idInput.value = ticket.id || "";
+  truckIdInput.value = ticket.truckId || "";
+  driverNameInput.value = ticket.driverName || "";
+  zoneInput.value = ticket.zone || "";
+  wasteTypeInput.value = ticket.wasteType || "";
+  scheduledWindowInput.value = ticket.scheduledWindow || "";
+  departureAtInput.value = formatDateTimeInputValue(ticket.departureAt);
+  completedAtInput.value = formatDateTimeInputValue(ticket.completedAt);
+  statusInput.value = ticket.status || "Scheduled";
+  volumeKgInput.value = Number.isFinite(Number(ticket.volumeKg)) && Number(ticket.volumeKg) > 0 ? String(ticket.volumeKg) : "";
+  remarksInput.value = ticket.remarks || "";
+  if (saveButton) {
+    saveButton.textContent = `Update ${ticket.id}`;
+  }
+}
+
+function showTripTicketMessage(message, isError = false) {
+  const messageNode = document.getElementById("tripTicketMessage");
+  if (!messageNode) {
+    return;
+  }
+
+  messageNode.textContent = message;
+  messageNode.style.color = isError ? "#b91c1c" : "#166534";
+}
+
+function getTripTicketById(ticketId) {
+  return (state.tripTickets || []).find((ticket) => ticket.id === ticketId) || null;
+}
+
+async function tripTicketRequest(url, method, body = null) {
+  return adminRequest(url, method, body);
+}
+
+async function fetchTripTickets() {
+  if (!state.token) {
+    return;
+  }
+
+  try {
+    const payload = await tripTicketRequest("/admin/trip-tickets", "GET");
+    state.tripTickets = payload.tripTickets || [];
+    renderTripTicketDriverOptions();
+    renderTripTicketManagement(state.tripTickets);
+  } catch (error) {
+    showTripTicketMessage(error.message || "Unable to load trip tickets.", true);
+  }
+}
+
+function syncTripTicketDriverFields(source = "name") {
+  const truckIdInput = document.getElementById("tripTicketTruckId");
+  const driverNameInput = document.getElementById("tripTicketDriverName");
+
+  if (!truckIdInput || !driverNameInput) {
+    return;
+  }
+
+  const normalizedDriverName = String(driverNameInput.value || "").trim().toLowerCase();
+  const normalizedTruckId = String(truckIdInput.value || "").trim().toUpperCase();
+
+  if (source === "name" && normalizedDriverName) {
+    const match = state.drivers.find((driver) => String(driver.name || "").trim().toLowerCase() === normalizedDriverName);
+    if (match?.truckId) {
+      truckIdInput.value = match.truckId;
+    }
+    return;
+  }
+
+  if (source === "truck" && normalizedTruckId) {
+    const match = state.drivers.find((driver) => String(driver.truckId || "").trim().toUpperCase() === normalizedTruckId);
+    if (match?.name) {
+      driverNameInput.value = match.name;
+    }
+  }
+}
+
+function setupTripTicketManagement() {
+  const form = document.getElementById("tripTicketForm");
+  const cancelButton = document.getElementById("tripTicketCancelButton");
+  const tableBody = document.getElementById("tripTicketManagementTableBody");
+  const driverNameInput = document.getElementById("tripTicketDriverName");
+  const truckIdInput = document.getElementById("tripTicketTruckId");
+
+  if (!form || !tableBody) {
+    return;
+  }
+
+  if (driverNameInput && driverNameInput.dataset.tripTicketBound !== "1") {
+    driverNameInput.dataset.tripTicketBound = "1";
+    driverNameInput.addEventListener("change", () => syncTripTicketDriverFields("name"));
+    driverNameInput.addEventListener("blur", () => syncTripTicketDriverFields("name"));
+  }
+
+  if (truckIdInput && truckIdInput.dataset.tripTicketBound !== "1") {
+    truckIdInput.dataset.tripTicketBound = "1";
+    truckIdInput.addEventListener("change", () => syncTripTicketDriverFields("truck"));
+    truckIdInput.addEventListener("blur", () => syncTripTicketDriverFields("truck"));
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const editingId = String(document.getElementById("tripTicketEditingId")?.value || "").trim();
+    const body = {
+      truckId: String(document.getElementById("tripTicketTruckId")?.value || "").trim(),
+      driverName: String(document.getElementById("tripTicketDriverName")?.value || "").trim(),
+      zone: String(document.getElementById("tripTicketZone")?.value || "").trim(),
+      wasteType: String(document.getElementById("tripTicketWasteType")?.value || "").trim(),
+      scheduledWindow: String(document.getElementById("tripTicketScheduledWindow")?.value || "").trim(),
+      departureAt: document.getElementById("tripTicketDepartureAt")?.value
+        ? new Date(document.getElementById("tripTicketDepartureAt").value).toISOString()
+        : "",
+      completedAt: document.getElementById("tripTicketCompletedAt")?.value
+        ? new Date(document.getElementById("tripTicketCompletedAt").value).toISOString()
+        : "",
+      status: String(document.getElementById("tripTicketStatus")?.value || "").trim(),
+      volumeKg: String(document.getElementById("tripTicketVolumeKg")?.value || "").trim(),
+      remarks: String(document.getElementById("tripTicketRemarks")?.value || "").trim(),
+    };
+
+    if (!body.truckId || !body.driverName || !body.zone || !body.wasteType || !body.scheduledWindow || !body.departureAt) {
+      showTripTicketMessage("Please fill truck, driver, zone, waste type, schedule window, and departure time.", true);
+      return;
+    }
+
+    if (["Completed", "Delayed"].includes(body.status) && !body.completedAt) {
+      showTripTicketMessage("Completed or delayed tickets need a completed time.", true);
+      return;
+    }
+
+    try {
+      if (editingId) {
+        await tripTicketRequest(`/admin/trip-tickets/${encodeURIComponent(editingId)}`, "PUT", body);
+        showTripTicketMessage(`Trip ticket ${editingId} updated.`);
+      } else {
+        const created = await tripTicketRequest("/admin/trip-tickets", "POST", body);
+        showTripTicketMessage(`Trip ticket ${created?.tripTicket?.id || ""} added.`);
+      }
+
+      setTripTicketForm(null);
+      await refreshCurrentPageData();
+    } catch (error) {
+      showTripTicketMessage(error.message || "Unable to save trip ticket.", true);
+    }
+  });
+
+  if (cancelButton) {
+    cancelButton.addEventListener("click", () => {
+      setTripTicketForm(null);
+      showTripTicketMessage("");
+    });
+  }
+
+  tableBody.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const action = target.getAttribute("data-trip-ticket-action");
+    const tripTicketId = String(target.getAttribute("data-trip-ticket-id") || "").trim();
+
+    if (!action || !tripTicketId) {
+      return;
+    }
+
+    if (action === "edit") {
+      const tripTicket = getTripTicketById(tripTicketId);
+      if (!tripTicket) {
+        showTripTicketMessage("Trip ticket not found.", true);
+        return;
+      }
+
+      setTripTicketForm(tripTicket);
+      showTripTicketMessage(`Editing ${tripTicketId}.`);
+      return;
+    }
+
+    if (action === "delete") {
+      const confirmed = window.confirm(`Delete trip ticket ${tripTicketId}?`);
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await tripTicketRequest(`/admin/trip-tickets/${encodeURIComponent(tripTicketId)}`, "DELETE");
+        showTripTicketMessage(`Trip ticket ${tripTicketId} deleted.`);
+        if (document.getElementById("tripTicketEditingId")?.value === tripTicketId) {
+          setTripTicketForm(null);
+        }
+        await refreshCurrentPageData();
+      } catch (error) {
+        showTripTicketMessage(error.message || "Unable to delete trip ticket.", true);
+      }
+    }
+  });
+}
+
 function setScheduleForm(schedule = null) {
   const idInput = document.getElementById("scheduleEditingId");
   const dayInput = document.getElementById("scheduleDay");
@@ -1399,6 +1744,7 @@ async function fetchDrivers() {
     const payload = await driverRequest("/admin/drivers", "GET");
     state.drivers = payload.drivers || [];
     renderDrivers(state.drivers);
+    renderTripTicketDriverOptions();
   } catch (error) {
     showDriverMessage(error.message || "Unable to load drivers.", true);
   }
@@ -1512,7 +1858,6 @@ function setupDriverManagement() {
     }
   });
 
-  fetchDrivers();
 }
 async function renderBackendInfo() {
   const dbType = document.getElementById("dbType");
@@ -1729,6 +2074,7 @@ async function renderPushDiagnostics() {
 
 function applyPayload(payload) {
   state.payload = payload || {};
+  state.tripTickets = Array.isArray(state.payload?.tripTickets) ? state.payload.tripTickets : state.tripTickets;
 
   renderStats(state.payload);
   renderStatusBreakdown(state.payload?.stats?.byStatus || {});
@@ -1739,6 +2085,8 @@ function applyPayload(payload) {
   renderAnnouncements(state.payload?.announcements || []);
   renderNews(state.payload?.news || []);
   renderTripTicketAnalytics(state.payload);
+  renderTripTicketDriverOptions();
+  renderTripTicketManagement(state.tripTickets || []);
   renderRecentActivity(state.payload?.reports || [], state.payload?.trucks || []);
 }
 async function fetchDashboard() {
@@ -1812,12 +2160,15 @@ function setupRealtime() {
   }
 
   const socket = window.io();
-  const refresh = () => fetchDashboard();
+  const refresh = () => refreshCurrentPageData();
 
   socket.on("truck:updated", refresh);
   socket.on("truck:removed", refresh);
   socket.on("trucks:snapshot", refresh);
   socket.on("report:created", refresh);
+  socket.on("trip-ticket:created", refresh);
+  socket.on("trip-ticket:updated", refresh);
+  socket.on("trip-ticket:deleted", refresh);
 }
 
 function setupReportPicturePreview() {
@@ -1870,7 +2221,23 @@ function setupSearch() {
     }
 
     renderDrivers(state.drivers || []);
+    renderTripTicketManagement(state.tripTickets || []);
   });
+}
+
+async function refreshCurrentPageData() {
+  const page = document.body.dataset.page || "";
+  const tasks = [fetchDashboard()];
+
+  if (page === "drivers" || page === "trip-tickets") {
+    tasks.push(fetchDrivers());
+  }
+
+  if (page === "trip-tickets") {
+    tasks.push(fetchTripTickets());
+  }
+
+  await Promise.all(tasks);
 }
 
 function setupScrollIndicators() {
@@ -2104,7 +2471,7 @@ function bootstrap() {
 
   const refreshButton = document.getElementById("refreshButton");
   if (refreshButton) {
-    refreshButton.addEventListener("click", () => fetchDashboard());
+    refreshButton.addEventListener("click", () => refreshCurrentPageData());
   }
 
   const mapFitButton = document.getElementById("mapFitButton");
@@ -2122,9 +2489,10 @@ function bootstrap() {
   setupAnnouncementManagement();
   setupNewsManagement();
   setupDriverManagement();
+  setupTripTicketManagement();
   setupRealtime();
-  fetchDashboard();
-  window.setInterval(fetchDashboard, 30000);
+  refreshCurrentPageData();
+  window.setInterval(refreshCurrentPageData, 30000);
 }
 
 bootstrap();

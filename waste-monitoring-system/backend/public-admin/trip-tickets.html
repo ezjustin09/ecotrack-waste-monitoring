@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Trip Tickets</title>
+    <link rel="stylesheet" href="/admin/styles.css?v=20260412e" />
+  </head>
+  <body data-page="trip-tickets">
+    <div class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <h2><span class="logo-mark">ET</span> Eco<span>Track</span></h2>
+        </div>
+        <nav class="menu">
+          <a class="menu-item" data-page-link="dashboard" href="/admin/dashboard.html">Dashboard</a>
+          <a class="menu-item" data-page-link="schedule" href="/admin/schedule.html">Schedule Management</a>
+          <a class="menu-item" data-page-link="reports" href="/admin/reports.html">Issue Reports</a>
+          <a class="menu-item" data-page-link="drivers" href="/admin/drivers.html">Truck Drivers</a>
+          <a class="menu-item" data-page-link="trip-tickets" href="/admin/trip-tickets.html">Trip Tickets</a>
+          <a class="menu-item" data-page-link="announcements" href="/admin/announcements.html">Announcements</a>
+          <a class="menu-item" data-page-link="news" href="/admin/news.html">News</a>
+          <a class="menu-item" data-page-link="analytics" href="/admin/analytics.html">Analytics</a>
+          <a class="menu-item" data-page-link="settings" href="/admin/settings.html">Settings</a>
+        </nav>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <h1>Trip Ticket Management</h1>
+          <div class="topbar-right">
+            <label class="search-box">
+              <span>Search</span>
+              <input id="searchInput" type="search" placeholder="Search ticket, truck, driver, zone" />
+            </label>
+            <button id="logoutButton" class="logout-button" type="button">Log out</button>
+          </div>
+        </header>
+
+        <section class="section-block">
+          <article class="card panel">
+            <div class="panel-heading">
+              <h2>Create or Update Trip Ticket</h2>
+              <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
+            </div>
+
+            <form id="tripTicketForm" class="schedule-form" autocomplete="off">
+              <input type="hidden" id="tripTicketEditingId" />
+
+              <div class="trip-ticket-form-grid">
+                <label class="form-field">
+                  <span>Truck ID</span>
+                  <input id="tripTicketTruckId" type="text" list="tripTicketTruckOptions" placeholder="TRUCK-002" required />
+                </label>
+
+                <label class="form-field">
+                  <span>Driver Name</span>
+                  <input id="tripTicketDriverName" type="text" list="tripTicketDriverOptions" placeholder="Assigned driver" required />
+                </label>
+
+                <label class="form-field">
+                  <span>Zone or Route</span>
+                  <input id="tripTicketZone" type="text" placeholder="Zone 2 - Central Pateros" required />
+                </label>
+
+                <label class="form-field">
+                  <span>Waste Type</span>
+                  <input id="tripTicketWasteType" type="text" placeholder="Biodegradable" required />
+                </label>
+
+                <label class="form-field">
+                  <span>Scheduled Window</span>
+                  <input id="tripTicketScheduledWindow" type="text" placeholder="6:00 AM - 10:00 AM" required />
+                </label>
+
+                <label class="form-field">
+                  <span>Status</span>
+                  <select id="tripTicketStatus" required>
+                    <option>Scheduled</option>
+                    <option>On Route</option>
+                    <option>Completed</option>
+                    <option>Delayed</option>
+                    <option>Missed</option>
+                  </select>
+                </label>
+
+                <label class="form-field">
+                  <span>Departure Time</span>
+                  <input id="tripTicketDepartureAt" type="datetime-local" required />
+                </label>
+
+                <label class="form-field">
+                  <span>Completed Time</span>
+                  <input id="tripTicketCompletedAt" type="datetime-local" />
+                </label>
+
+                <label class="form-field">
+                  <span>Volume (kg)</span>
+                  <input id="tripTicketVolumeKg" type="number" min="0" step="0.1" placeholder="0" />
+                </label>
+
+                <label class="form-field field-span-full">
+                  <span>Remarks</span>
+                  <textarea id="tripTicketRemarks" rows="3" placeholder="Optional trip notes"></textarea>
+                </label>
+              </div>
+
+              <datalist id="tripTicketDriverOptions"></datalist>
+              <datalist id="tripTicketTruckOptions"></datalist>
+
+              <div class="schedule-form-actions">
+                <button id="tripTicketSaveButton" type="submit" class="login-button">Save Trip Ticket</button>
+                <button id="tripTicketCancelButton" type="button" class="refresh-button">Cancel Edit</button>
+              </div>
+
+              <p id="tripTicketMessage" class="auth-error"></p>
+            </form>
+          </article>
+
+          <article class="card panel panel-wide">
+            <div class="panel-heading">
+              <h2>Trip Ticket List</h2>
+            </div>
+            <div class="table-wrap scroll-table-wrap" tabindex="0" aria-label="Scroll left or right to view the full trip ticket list">
+              <table class="feed-table trip-ticket-feed-table">
+                <thead>
+                  <tr>
+                    <th>Ticket ID</th>
+                    <th>Truck ID</th>
+                    <th>Driver</th>
+                    <th>Zone</th>
+                    <th>Waste Type</th>
+                    <th>Window</th>
+                    <th>Departure</th>
+                    <th>Completed</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tripTicketManagementTableBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/admin/admin-pages.js?v=20260412e" defer></script>
+  </body>
+</html>
