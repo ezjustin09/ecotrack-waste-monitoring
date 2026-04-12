@@ -1664,6 +1664,131 @@ function setupSearch() {
   });
 }
 
+function setupScrollIndicators() {
+  const scrollTables = Array.from(document.querySelectorAll(".scroll-table-wrap"));
+
+  scrollTables.forEach((container) => {
+    if (!(container instanceof HTMLElement)) {
+      return;
+    }
+
+    let indicator = container.nextElementSibling;
+    if (!(indicator instanceof HTMLElement) || !indicator.classList.contains("table-scroll-indicator")) {
+      indicator = document.createElement("div");
+      indicator.className = "table-scroll-indicator";
+      indicator.setAttribute("aria-hidden", "true");
+
+      const thumb = document.createElement("span");
+      thumb.className = "table-scroll-indicator-thumb";
+      indicator.appendChild(thumb);
+      container.insertAdjacentElement("afterend", indicator);
+    }
+
+    const thumb = indicator.querySelector(".table-scroll-indicator-thumb");
+    if (!(thumb instanceof HTMLElement)) {
+      return;
+    }
+
+    const updateIndicator = () => {
+      const maxScroll = Math.max(container.scrollWidth - container.clientWidth, 0);
+      if (maxScroll <= 1) {
+        indicator.hidden = true;
+        thumb.style.width = "";
+        thumb.style.transform = "translateX(0)";
+        return;
+      }
+
+      indicator.hidden = false;
+      const trackWidth = indicator.clientWidth || container.clientWidth;
+      const thumbWidth = Math.max(Math.round(trackWidth * (container.clientWidth / container.scrollWidth)), 72);
+      const clampedThumbWidth = Math.min(thumbWidth, trackWidth);
+      const maxThumbTravel = Math.max(trackWidth - clampedThumbWidth, 0);
+      const scrollRatio = maxScroll > 0 ? container.scrollLeft / maxScroll : 0;
+      const thumbOffset = maxThumbTravel * scrollRatio;
+
+      thumb.style.width = `${clampedThumbWidth}px`;
+      thumb.style.transform = `translateX(${thumbOffset}px)`;
+    };
+
+    if (container.dataset.scrollIndicatorBound !== "1") {
+      container.dataset.scrollIndicatorBound = "1";
+      container.addEventListener("scroll", updateIndicator, { passive: true });
+
+      let dragState = null;
+
+      indicator.addEventListener("pointerdown", (event) => {
+        const maxScroll = Math.max(container.scrollWidth - container.clientWidth, 0);
+        const trackRect = indicator.getBoundingClientRect();
+        const thumbRect = thumb.getBoundingClientRect();
+
+        if (maxScroll <= 1 || trackRect.width <= 0) {
+          return;
+        }
+
+        const pointerOffset = event.clientX - trackRect.left;
+        const thumbLeft = thumbRect.left - trackRect.left;
+        const thumbWidth = thumbRect.width;
+        const clickedThumb = pointerOffset >= thumbLeft && pointerOffset <= thumbLeft + thumbWidth;
+        const maxThumbTravel = Math.max(trackRect.width - thumbWidth, 1);
+
+        if (!clickedThumb) {
+          const targetThumbLeft = Math.max(0, Math.min(pointerOffset - thumbWidth / 2, trackRect.width - thumbWidth));
+          const targetRatio = targetThumbLeft / maxThumbTravel;
+          container.scrollLeft = targetRatio * maxScroll;
+        }
+
+        dragState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startScrollLeft: container.scrollLeft,
+          maxScroll,
+          maxThumbTravel,
+        };
+
+        indicator.setPointerCapture(event.pointerId);
+      });
+
+      indicator.addEventListener("pointermove", (event) => {
+        if (!dragState || dragState.pointerId !== event.pointerId) {
+          return;
+        }
+
+        const deltaX = event.clientX - dragState.startX;
+        const scrollDelta = (deltaX / dragState.maxThumbTravel) * dragState.maxScroll;
+        container.scrollLeft = Math.max(0, Math.min(dragState.startScrollLeft + scrollDelta, dragState.maxScroll));
+      });
+
+      const releaseDrag = (event) => {
+        if (!dragState || dragState.pointerId !== event.pointerId) {
+          return;
+        }
+
+        if (indicator.hasPointerCapture(event.pointerId)) {
+          indicator.releasePointerCapture(event.pointerId);
+        }
+
+        dragState = null;
+      };
+
+      indicator.addEventListener("pointerup", releaseDrag);
+      indicator.addEventListener("pointercancel", releaseDrag);
+
+      if (typeof ResizeObserver !== "undefined") {
+        const observer = new ResizeObserver(updateIndicator);
+        observer.observe(container);
+        const table = container.querySelector("table");
+        if (table instanceof HTMLElement) {
+          observer.observe(table);
+        }
+      } else {
+        window.addEventListener("resize", updateIndicator);
+      }
+    }
+
+    window.requestAnimationFrame(updateIndicator);
+  });
+}
+
 function setupResponsiveSidebar() {
   const sidebar = document.querySelector(".sidebar");
   const topbar = document.querySelector(".topbar");
@@ -1783,6 +1908,7 @@ function bootstrap() {
 
   setupReportPicturePreview();
   setupSearch();
+  setupScrollIndicators();
   setupScheduleManagement();
   setupAnnouncementManagement();
   setupNewsManagement();

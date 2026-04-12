@@ -575,6 +575,39 @@ body.admin-nav-open {
   min-width: 860px;
 }
 
+.table-scroll-indicator {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+}
+
+.table-scroll-indicator[hidden] {
+  display: none;
+}
+
+.table-scroll-indicator-thumb {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: 10px;
+  min-width: 72px;
+  border-radius: 999px;
+  background: #7b7f86;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  cursor: grab;
+}
+
+.table-scroll-indicator-thumb:active {
+  cursor: grabbing;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -710,7 +743,7 @@ th {
   }
 
   .topbar-title-trigger {
-    cursor: pointer;
+    cursor: default;
   }
 
   .stat-grid {
