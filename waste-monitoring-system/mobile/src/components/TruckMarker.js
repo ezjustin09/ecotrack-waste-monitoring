@@ -1,6 +1,6 @@
 import React from "react";
 import { Callout, Marker } from "react-native-maps";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { getTruckStatusMeta } from "../utils/truckStatus";
 
@@ -36,19 +36,37 @@ export default function TruckMarker({ truck, markerCoordinate, selected = false,
     <Marker
       coordinate={coordinate}
       anchor={{ x: 0.5, y: 1 }}
-      centerOffset={{ x: 0, y: -18 }}
-      image={truckMarkerIcon}
+      centerOffset={{ x: 0, y: -10 }}
       zIndex={selected ? 20 : 10}
       onPress={() => onPress?.(truck)}
       title={truck.truckId}
       description={`${truck.status} | ${truck.latitude.toFixed(4)}, ${truck.longitude.toFixed(4)}`}
     >
+      <View style={styles.markerShell}>
+        <Image
+          source={truckMarkerIcon}
+          style={[styles.markerImage, selected && styles.markerImageSelected]}
+          resizeMode="contain"
+        />
+      </View>
       <TruckCallout truck={truck} statusMeta={statusMeta} />
     </Marker>
   );
 }
 
 const styles = StyleSheet.create({
+  markerShell: {
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  markerImage: {
+    width: 72,
+    height: 92,
+  },
+  markerImageSelected: {
+    width: 78,
+    height: 98,
+  },
   callout: {
     backgroundColor: "#ffffff",
     borderRadius: 18,
