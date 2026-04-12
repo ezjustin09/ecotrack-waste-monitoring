@@ -1667,12 +1667,20 @@ function setupSearch() {
 function setupResponsiveSidebar() {
   const sidebar = document.querySelector(".sidebar");
   const topbar = document.querySelector(".topbar");
+  const titleNode = topbar?.querySelector("h1");
 
-  if (!sidebar || !topbar || topbar.dataset.sidebarBound === "1") {
+  if (!sidebar || !topbar || !titleNode || topbar.dataset.sidebarBound === "1") {
     return;
   }
 
   topbar.dataset.sidebarBound = "1";
+
+  let topbarHeader = topbar.querySelector(".topbar-header");
+  if (!topbarHeader) {
+    topbarHeader = document.createElement("div");
+    topbarHeader.className = "topbar-header";
+    topbar.insertBefore(topbarHeader, topbar.firstChild);
+  }
 
   const navToggleButton = document.createElement("button");
   navToggleButton.type = "button";
@@ -1681,15 +1689,19 @@ function setupResponsiveSidebar() {
   navToggleButton.setAttribute("aria-expanded", "false");
   navToggleButton.innerHTML = "<span></span><span></span><span></span>";
 
+  topbarHeader.appendChild(navToggleButton);
+  topbarHeader.appendChild(titleNode);
+
   const sidebarOverlay = document.createElement("button");
   sidebarOverlay.type = "button";
   sidebarOverlay.className = "sidebar-overlay";
   sidebarOverlay.setAttribute("aria-label", "Close navigation menu");
 
-  topbar.insertBefore(navToggleButton, topbar.firstChild);
   document.body.appendChild(sidebarOverlay);
 
   const mobileMedia = window.matchMedia("(max-width: 1100px)");
+
+  titleNode.classList.add("topbar-title-trigger");
 
   function closeSidebar() {
     document.body.classList.remove("admin-nav-open");
@@ -1704,6 +1716,10 @@ function setupResponsiveSidebar() {
   }
 
   navToggleButton.addEventListener("click", () => {
+    if (!mobileMedia.matches) {
+      return;
+    }
+
     const isOpen = document.body.classList.contains("admin-nav-open");
     if (isOpen) {
       closeSidebar();

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Drivers</title>
-    <link rel="stylesheet" href="/admin/styles.css?v=20260411d" />
+    <link rel="stylesheet" href="/admin/styles.css?v=20260412b" />
   </head>
   <body data-page="drivers">
     <div class="admin-shell">
@@ -70,9 +70,10 @@
           <article class="card panel panel-wide">
             <div class="panel-heading">
               <h2>Driver Accounts</h2>
+              <p class="table-scroll-hint">Scroll sideways to see all columns.</p>
             </div>
-            <div class="table-wrap">
-              <table>
+            <div class="table-wrap scroll-table-wrap" tabindex="0" aria-label="Scroll left or right to view the full driver accounts list">
+              <table class="feed-table">
                 <thead>
                   <tr>
                     <th>Driver ID</th>
@@ -92,7 +93,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/admin/admin-pages.js?v=20260411d" defer></script>
+    <script src="/admin/admin-pages.js?v=20260412b" defer></script>
   </body>
 </html>
 

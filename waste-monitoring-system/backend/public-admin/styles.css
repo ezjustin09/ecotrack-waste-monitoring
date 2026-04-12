@@ -255,6 +255,13 @@ body.admin-nav-open {
   max-width: 100%;
 }
 
+.topbar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
 .topbar-title-trigger {
   cursor: default;
 }
@@ -533,7 +540,7 @@ body.admin-nav-open {
   overflow: auto;
 }
 
-.swipe-table-wrap {
+.scroll-table-wrap {
   position: relative;
   overflow-x: auto;
   overflow-y: hidden;
@@ -542,18 +549,33 @@ body.admin-nav-open {
   touch-action: pan-x;
   scrollbar-width: thin;
   scrollbar-color: #9ca3af #e5e7eb;
+  padding-bottom: 8px;
 }
 
-.swipe-table-wrap:focus-visible {
+.scroll-table-wrap::-webkit-scrollbar {
+  height: 10px;
+}
+
+.scroll-table-wrap::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 999px;
+}
+
+.scroll-table-wrap::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 999px;
+}
+
+.scroll-table-wrap:focus-visible {
   outline: 2px solid #86efac;
   outline-offset: 3px;
 }
 
-.swipe-table {
+.feed-table {
   min-width: 860px;
 }
 
-.table-swipe-hint {
+.table-scroll-hint {
   display: none;
   margin: 0;
   color: var(--slate-500);
@@ -691,6 +713,10 @@ th {
     z-index: 20;
   }
 
+  .nav-toggle-button {
+    display: inline-flex;
+  }
+
   .topbar-title-trigger {
     cursor: pointer;
   }
@@ -729,6 +755,10 @@ th {
     padding: 14px 16px;
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .topbar-header {
+    width: 100%;
   }
 
   .topbar h1 {
@@ -774,26 +804,13 @@ th {
     flex-direction: column;
   }
 
-  .table-swipe-hint {
+  .table-scroll-hint {
     display: block;
   }
 
-  .swipe-table-wrap {
+  .scroll-table-wrap {
     margin-inline: -4px;
-    padding-bottom: 6px;
-  }
-
-  .swipe-table-wrap::after {
-    content: "";
-    position: sticky;
-    right: 0;
-    display: block;
-    width: 18px;
-    height: 1px;
-    margin-left: auto;
-    background: transparent;
-    box-shadow: 18px 0 24px 16px rgba(243, 244, 246, 0.96);
-    pointer-events: none;
+    padding-bottom: 10px;
   }
 
   .panel-actions {
@@ -940,6 +957,7 @@ th {
 .table-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .table-actions .schedule-edit-btn,
