@@ -255,6 +255,10 @@ body.admin-nav-open {
   max-width: 100%;
 }
 
+.topbar-title-trigger {
+  cursor: default;
+}
+
 .nav-toggle-button {
   display: none;
   width: 42px;
@@ -529,6 +533,34 @@ body.admin-nav-open {
   overflow: auto;
 }
 
+.swipe-table-wrap {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: thin;
+  scrollbar-color: #9ca3af #e5e7eb;
+}
+
+.swipe-table-wrap:focus-visible {
+  outline: 2px solid #86efac;
+  outline-offset: 3px;
+}
+
+.swipe-table {
+  min-width: 860px;
+}
+
+.table-swipe-hint {
+  display: none;
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -653,14 +685,14 @@ th {
     display: block;
   }
 
-  .nav-toggle-button {
-    display: inline-flex;
-  }
-
   .topbar {
     position: sticky;
     top: 0;
     z-index: 20;
+  }
+
+  .topbar-title-trigger {
+    cursor: pointer;
   }
 
   .stat-grid {
@@ -695,8 +727,8 @@ th {
 
   .topbar {
     padding: 14px 16px;
-    align-items: center;
-    flex-wrap: wrap;
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .topbar h1 {
@@ -707,15 +739,13 @@ th {
     width: 100%;
     flex-wrap: wrap;
     justify-content: flex-start;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
+    display: flex;
+    align-items: center;
   }
 
   .search-box {
-    flex: 1 1 100%;
-    width: 100%;
-    grid-column: 1 / -1;
+    flex: 1 1 220px;
+    width: auto;
   }
 
   .search-box input {
@@ -742,6 +772,28 @@ th {
   .panel-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .table-swipe-hint {
+    display: block;
+  }
+
+  .swipe-table-wrap {
+    margin-inline: -4px;
+    padding-bottom: 6px;
+  }
+
+  .swipe-table-wrap::after {
+    content: "";
+    position: sticky;
+    right: 0;
+    display: block;
+    width: 18px;
+    height: 1px;
+    margin-left: auto;
+    background: transparent;
+    box-shadow: 18px 0 24px 16px rgba(243, 244, 246, 0.96);
+    pointer-events: none;
   }
 
   .panel-actions {
