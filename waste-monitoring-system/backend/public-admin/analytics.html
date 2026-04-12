@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Analytics</title>
-    <link rel="stylesheet" href="/admin/styles.css?v=20260412c" />
+    <link rel="stylesheet" href="/admin/styles.css?v=20260412d" />
   </head>
   <body data-page="analytics">
     <div class="admin-shell">
@@ -30,7 +30,7 @@
           <div class="topbar-right">
             <label class="search-box">
               <span>Search</span>
-              <input id="searchInput" type="search" placeholder="Search status or truck" />
+              <input id="searchInput" type="search" placeholder="Search ticket, truck, driver, zone" />
             </label>
             <button id="logoutButton" class="logout-button" type="button">Log out</button>
           </div>
@@ -44,36 +44,75 @@
               <small>Live telemetry</small>
             </article>
             <article class="stat-card amber">
-              <p>Reports Today</p>
-              <h3 id="reportsToday">0</h3>
-              <small>Daily volume</small>
+              <p>Trip Tickets Today</p>
+              <h3 id="tripTicketsToday">0</h3>
+              <small>Collection runs logged today</small>
             </article>
             <article class="stat-card red">
-              <p>Total Reports</p>
-              <h3 id="reportsTotal">0</h3>
-              <small>Overall load</small>
+              <p>Completed Trips</p>
+              <h3 id="completedTrips">0</h3>
+              <small>Completed or delayed runs</small>
             </article>
             <article class="stat-card green-soft">
-              <p>Schedules</p>
-              <h3 id="scheduleTotal">0</h3>
-              <small>Configured slots</small>
+              <p>Average Trip Duration</p>
+              <h3 id="averageTripDuration">0m</h3>
+              <small>Average finished trip time</small>
             </article>
           </div>
 
-          <article class="card panel">
-            <div class="panel-heading">
-              <h2>Status Distribution</h2>
-              <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
-            </div>
-            <div id="statusChips" class="status-chips"></div>
-            <div id="statusBars" class="bar-list"></div>
-          </article>
+          <div class="analytics-grid">
+            <article class="card panel">
+              <div class="panel-heading">
+                <h2>Trip Ticket Overview</h2>
+                <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
+              </div>
+              <div id="tripInsightChips" class="status-chips"></div>
+              <div id="tripStatusBars" class="bar-list"></div>
+            </article>
+
+            <article class="card panel">
+              <div class="panel-heading">
+                <h2>Zone Collection Load</h2>
+              </div>
+              <div id="zoneBars" class="bar-list"></div>
+            </article>
+
+            <article class="card panel panel-wide">
+              <div class="panel-heading">
+                <h2>Truck Performance</h2>
+              </div>
+              <div id="truckPerformanceList" class="analytics-performance-grid"></div>
+            </article>
+
+            <article class="card panel panel-wide">
+              <div class="panel-heading">
+                <h2>Recent Trip Tickets</h2>
+              </div>
+              <div class="table-wrap scroll-table-wrap" tabindex="0" aria-label="Scroll left or right to view the full trip ticket list">
+                <table class="feed-table">
+                  <thead>
+                    <tr>
+                      <th>Ticket ID</th>
+                      <th>Truck</th>
+                      <th>Driver</th>
+                      <th>Zone</th>
+                      <th>Status</th>
+                      <th>Duration</th>
+                      <th>Volume</th>
+                      <th>Completed</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tripTicketTableBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
         </section>
       </main>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/admin/admin-pages.js?v=20260412c" defer></script>
+    <script src="/admin/admin-pages.js?v=20260412d" defer></script>
   </body>
 </html>
 

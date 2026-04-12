@@ -165,6 +165,7 @@ let reportsCollection;
 let schedulesCollection;
 let announcementsCollection;
 let newsCollection;
+let tripTicketsCollection;
 let countersCollection;
 let userSessionsCollection;
 let adminSessionsCollection;
@@ -262,6 +263,137 @@ const DEFAULT_NEWS_ITEMS = [
       "Recent system updates helped response teams dispatch cleanup crews faster after citizen reports.",
   },
 ];
+
+const DEFAULT_TRIP_TICKET_TEMPLATES = [
+  {
+    id: "TT-001",
+    truckId: "TRUCK-002",
+    driverName: "Miguel Santos",
+    zone: "Zone 1 - West Pateros",
+    wasteType: "Biodegradable",
+    scheduledWindow: "6:00 AM - 9:00 AM",
+    departureOffsetDays: -4,
+    departureHour: 6,
+    departureMinute: 5,
+    durationMinutes: 108,
+    status: "Completed",
+    volumeKg: 415,
+    remarks: "Completed before the recovery route started.",
+  },
+  {
+    id: "TT-002",
+    truckId: "TRUCK-003",
+    driverName: "Rafael Cruz",
+    zone: "Zone 2 - Central Pateros",
+    wasteType: "Non-biodegradable",
+    scheduledWindow: "6:00 AM - 10:00 AM",
+    departureOffsetDays: -3,
+    departureHour: 6,
+    departureMinute: 18,
+    durationMinutes: 146,
+    status: "Delayed",
+    volumeKg: 382,
+    remarks: "Traffic slowdown near M. Almeda.",
+  },
+  {
+    id: "TT-003",
+    truckId: "TRUCK-004",
+    driverName: "Paolo Reyes",
+    zone: "Zone 3 - East Pateros",
+    wasteType: "Biodegradable",
+    scheduledWindow: "7:00 AM - 11:00 AM",
+    departureOffsetDays: -2,
+    departureHour: 7,
+    departureMinute: 2,
+    durationMinutes: 121,
+    status: "Completed",
+    volumeKg: 438,
+    remarks: "Normal route completion.",
+  },
+  {
+    id: "TT-004",
+    truckId: "TRUCK-002",
+    driverName: "Miguel Santos",
+    zone: "Zone 4 - Riverside",
+    wasteType: "Non-biodegradable",
+    scheduledWindow: "7:00 AM - 11:00 AM",
+    departureOffsetDays: -1,
+    departureHour: 7,
+    departureMinute: 10,
+    durationMinutes: 97,
+    status: "Completed",
+    volumeKg: 294,
+    remarks: "Faster route due to lighter volume.",
+  },
+  {
+    id: "TT-005",
+    truckId: "TRUCK-003",
+    driverName: "Rafael Cruz",
+    zone: "Zone 2 - Central Pateros",
+    wasteType: "Special Collection",
+    scheduledWindow: "8:00 AM - 12:00 PM",
+    departureOffsetDays: 0,
+    departureHour: 8,
+    departureMinute: 12,
+    durationMinutes: 84,
+    status: "On Route",
+    volumeKg: 155,
+    remarks: "Still collecting along the central corridor.",
+  },
+  {
+    id: "TT-006",
+    truckId: "TRUCK-004",
+    driverName: "Paolo Reyes",
+    zone: "Zone 5 - Market Area",
+    wasteType: "Residual Waste",
+    scheduledWindow: "8:00 AM - 12:00 PM",
+    departureOffsetDays: 0,
+    departureHour: 8,
+    departureMinute: 0,
+    durationMinutes: 0,
+    status: "Missed",
+    volumeKg: 0,
+    remarks: "Ticket marked missed due to truck maintenance check.",
+  },
+];
+
+function createRelativeDate(dayOffset, hour, minute) {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + dayOffset);
+  date.setHours(hour, minute, 0, 0);
+  return date;
+}
+
+function buildDefaultTripTickets() {
+  return DEFAULT_TRIP_TICKET_TEMPLATES.map((template) => {
+    const departureAt = createRelativeDate(
+      template.departureOffsetDays,
+      template.departureHour,
+      template.departureMinute
+    );
+    const completedAt =
+      template.status === "Completed" || template.status === "Delayed"
+        ? new Date(departureAt.getTime() + template.durationMinutes * 60 * 1000)
+        : null;
+
+    return {
+      id: template.id,
+      truckId: template.truckId,
+      driverName: template.driverName,
+      zone: template.zone,
+      wasteType: template.wasteType,
+      scheduledWindow: template.scheduledWindow,
+      departureAt,
+      completedAt,
+      status: template.status,
+      volumeKg: template.volumeKg,
+      remarks: template.remarks,
+      createdAt: departureAt,
+      updatedAt: completedAt || new Date(Math.max(departureAt.getTime(), Date.now() - 15 * 60 * 1000)),
+    };
+  });
+}
 function parseNumericSuffix(value, prefix) {
   const text = String(value || "");
 
@@ -346,6 +478,34 @@ function sanitizeFeedItem(item) {
     details: item.details,
     createdAt: toIsoString(item.createdAt),
     updatedAt: toIsoString(item.updatedAt),
+  };
+}
+
+function getTripTicketDurationMinutes(ticket) {
+  const departureAt = new Date(ticket?.departureAt || 0).getTime();
+  const completedAt = new Date(ticket?.completedAt || 0).getTime();
+
+  if (!Number.isFinite(departureAt) || !Number.isFinite(completedAt) || completedAt <= departureAt) {
+    return null;
+  }
+
+  return Math.round((completedAt - departureAt) / 60000);
+}
+
+function sanitizeTripTicket(ticket) {
+  return {
+    id: ticket.id,
+    truckId: ticket.truckId,
+    driverName: ticket.driverName || "",
+    zone: ticket.zone || "",
+    wasteType: ticket.wasteType || "",
+    scheduledWindow: ticket.scheduledWindow || "",
+    departureAt: toIsoString(ticket.departureAt),
+    completedAt: toIsoString(ticket.completedAt),
+    status: ticket.status || "Unknown",
+    volumeKg: Number(ticket.volumeKg || 0),
+    remarks: ticket.remarks || "",
+    durationMinutes: getTripTicketDurationMinutes(ticket),
   };
 }
 
@@ -438,20 +598,147 @@ async function getNewsList() {
   return rows.map(sanitizeFeedItem);
 }
 
+async function getTripTicketList(limit = 120) {
+  const rows = await tripTicketsCollection.find({}).sort({ departureAt: -1, id: 1 }).limit(limit).toArray();
+  return rows.map(sanitizeTripTicket);
+}
+
+function buildTripTicketAnalytics(tripTickets = []) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const completedStatuses = new Set(["Completed", "Delayed"]);
+
+  const summary = {
+    totalTickets: tripTickets.length,
+    ticketsToday: 0,
+    completedTrips: 0,
+    delayedTrips: 0,
+    inProgressTrips: 0,
+    missedTrips: 0,
+    averageDurationMinutes: 0,
+    completionRate: 0,
+    totalVolumeKg: 0,
+    trucksCovered: 0,
+    statusBreakdown: [],
+    zoneBreakdown: [],
+    truckPerformance: [],
+  };
+
+  if (!tripTickets.length) {
+    return summary;
+  }
+
+  const durations = [];
+  const statusCounts = new Map();
+  const zoneCounts = new Map();
+  const truckStats = new Map();
+
+  tripTickets.forEach((ticket) => {
+    const departureAt = new Date(ticket.departureAt || 0);
+    const status = String(ticket.status || "Unknown");
+    const volumeKg = Number(ticket.volumeKg || 0);
+    const durationMinutes = Number(ticket.durationMinutes);
+
+    if (!Number.isNaN(departureAt.getTime()) && departureAt >= startOfToday) {
+      summary.ticketsToday += 1;
+    }
+
+    if (completedStatuses.has(status)) {
+      summary.completedTrips += 1;
+    }
+
+    if (status === "Delayed") {
+      summary.delayedTrips += 1;
+    } else if (status === "On Route") {
+      summary.inProgressTrips += 1;
+    } else if (status === "Missed") {
+      summary.missedTrips += 1;
+    }
+
+    if (Number.isFinite(volumeKg)) {
+      summary.totalVolumeKg += volumeKg;
+    }
+
+    if (Number.isFinite(durationMinutes) && durationMinutes > 0) {
+      durations.push(durationMinutes);
+    }
+
+    statusCounts.set(status, (statusCounts.get(status) || 0) + 1);
+    zoneCounts.set(ticket.zone, (zoneCounts.get(ticket.zone) || 0) + 1);
+
+    const truckKey = ticket.truckId || "Unknown";
+    const currentTruck = truckStats.get(truckKey) || {
+      truckId: truckKey,
+      driverName: ticket.driverName || "",
+      trips: 0,
+      completedTrips: 0,
+      delayedTrips: 0,
+      totalVolumeKg: 0,
+      durations: [],
+    };
+
+    currentTruck.trips += 1;
+    if (completedStatuses.has(status)) {
+      currentTruck.completedTrips += 1;
+    }
+    if (status === "Delayed") {
+      currentTruck.delayedTrips += 1;
+    }
+    if (Number.isFinite(volumeKg)) {
+      currentTruck.totalVolumeKg += volumeKg;
+    }
+    if (Number.isFinite(durationMinutes) && durationMinutes > 0) {
+      currentTruck.durations.push(durationMinutes);
+    }
+
+    truckStats.set(truckKey, currentTruck);
+  });
+
+  summary.averageDurationMinutes =
+    durations.length > 0 ? Math.round(durations.reduce((total, value) => total + value, 0) / durations.length) : 0;
+  summary.completionRate = summary.totalTickets > 0 ? Math.round((summary.completedTrips / summary.totalTickets) * 100) : 0;
+  summary.trucksCovered = truckStats.size;
+
+  summary.statusBreakdown = Array.from(statusCounts.entries())
+    .map(([status, count]) => ({ label: status, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  summary.zoneBreakdown = Array.from(zoneCounts.entries())
+    .map(([zone, count]) => ({ label: zone || "Unknown zone", count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  summary.truckPerformance = Array.from(truckStats.values())
+    .map((truck) => ({
+      truckId: truck.truckId,
+      driverName: truck.driverName,
+      trips: truck.trips,
+      completedTrips: truck.completedTrips,
+      delayedTrips: truck.delayedTrips,
+      totalVolumeKg: truck.totalVolumeKg,
+      averageDurationMinutes:
+        truck.durations.length > 0
+          ? Math.round(truck.durations.reduce((total, value) => total + value, 0) / truck.durations.length)
+          : 0,
+      completionRate: truck.trips > 0 ? Math.round((truck.completedTrips / truck.trips) * 100) : 0,
+    }))
+    .sort((a, b) => b.trips - a.trips || a.truckId.localeCompare(b.truckId));
+
+  return summary;
+}
+
 async function buildAdminDashboardPayload() {
   const liveTrucks = listTrucks();
   const truckSummary = summarizeTruckStatuses(liveTrucks);
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
-  const [reportsTotal, reportsToday, reportRows, scheduleRows, announcementsRows, newsRows] = await Promise.all([
+  const [reportsTotal, reportsToday, reportRows, scheduleRows, announcementsRows, newsRows, tripTicketRows] = await Promise.all([
     reportsCollection.countDocuments(),
-    reportsCollection.countDocuments({ createdAt: { $gte: startOfToday } }),
+    reportsCollection.countDocuments({ createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
     reportsCollection.find({}).sort({ createdAt: -1 }).limit(100).toArray(),
     getScheduleList(),
     getAnnouncementList(),
     getNewsList(),
+    getTripTicketList(),
   ]);
+  const tripAnalytics = buildTripTicketAnalytics(tripTicketRows);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -460,12 +747,17 @@ async function buildAdminDashboardPayload() {
       reportsTotal,
       reportsToday,
       byStatus: truckSummary.byStatus,
+      tripTicketsToday: tripAnalytics.ticketsToday,
+      completedTrips: tripAnalytics.completedTrips,
+      averageTripDurationMinutes: tripAnalytics.averageDurationMinutes,
     },
     trucks: liveTrucks,
     reports: reportRows.map(sanitizeReport),
     schedule: scheduleRows,
     announcements: announcementsRows,
     news: newsRows,
+    tripTickets: tripTicketRows,
+    tripAnalytics,
   };
 }
 
@@ -2063,6 +2355,7 @@ async function connectDatabase() {
   schedulesCollection = database.collection("schedules");
   announcementsCollection = database.collection("announcements");
   newsCollection = database.collection("news");
+  tripTicketsCollection = database.collection("trip_tickets");
   countersCollection = database.collection("counters");
   userSessionsCollection = database.collection("sessions");
   adminSessionsCollection = database.collection("admin_sessions");
@@ -2080,6 +2373,10 @@ async function connectDatabase() {
     announcementsCollection.createIndex({ createdAt: -1 }),
     newsCollection.createIndex({ id: 1 }, { unique: true }),
     newsCollection.createIndex({ createdAt: -1 }),
+    tripTicketsCollection.createIndex({ id: 1 }, { unique: true }),
+    tripTicketsCollection.createIndex({ departureAt: -1 }),
+    tripTicketsCollection.createIndex({ truckId: 1, departureAt: -1 }),
+    tripTicketsCollection.createIndex({ zone: 1 }),
     userSessionsCollection.createIndex({ token: 1 }, { unique: true }),
     userSessionsCollection.createIndex({ userId: 1 }),
     userSessionsCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
@@ -2118,12 +2415,18 @@ async function connectDatabase() {
     );
   }
 
-  const [maxUserCounter, maxReportCounter, maxScheduleCounter, maxAnnouncementCounter, maxNewsCounter] = await Promise.all([
+  const tripTicketCount = await tripTicketsCollection.countDocuments();
+  if (tripTicketCount === 0) {
+    await tripTicketsCollection.insertMany(buildDefaultTripTickets());
+  }
+
+  const [maxUserCounter, maxReportCounter, maxScheduleCounter, maxAnnouncementCounter, maxNewsCounter, maxTripTicketCounter] = await Promise.all([
     getMaxCounterFromCollection(usersCollection, "USR-"),
     getMaxCounterFromCollection(reportsCollection, "RPT-"),
     getMaxCounterFromCollection(schedulesCollection, "SCH-"),
     getMaxCounterFromCollection(announcementsCollection, "ANN-"),
     getMaxCounterFromCollection(newsCollection, "NEWS-"),
+    getMaxCounterFromCollection(tripTicketsCollection, "TT-"),
   ]);
 
   await Promise.all([
@@ -2132,6 +2435,7 @@ async function connectDatabase() {
     ensureCounter("schedule", maxScheduleCounter),
     ensureCounter("announcement", maxAnnouncementCounter),
     ensureCounter("news", maxNewsCounter),
+    ensureCounter("trip_ticket", maxTripTicketCounter),
   ]);
 
   await migrateLegacyPasswords();

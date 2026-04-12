@@ -45,6 +45,42 @@ function formatDateTime(value) {
   }).format(new Date(value));
 }
 
+function formatCount(value) {
+  return new Intl.NumberFormat("en-PH").format(Number(value || 0));
+}
+
+function formatDurationMinutes(value) {
+  const minutes = Number(value);
+
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    return "-";
+  }
+
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (!remainingMinutes) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+function formatKilograms(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return "0 kg";
+  }
+
+  return `${new Intl.NumberFormat("en-PH", {
+    maximumFractionDigits: amount >= 100 ? 0 : 1,
+  }).format(amount)} kg`;
+}
+
 function truncate(text, max = 58) {
   const normalized = String(text || "").trim();
   if (!normalized) {
@@ -149,24 +185,44 @@ function filterBySearch(list, fields) {
 
 function renderStats(payload) {
   const stats = payload?.stats || {};
+  const tripAnalytics = payload?.tripAnalytics || {};
 
   const activeTrucks = document.getElementById("activeTrucks");
   const reportsToday = document.getElementById("reportsToday");
   const reportsTotal = document.getElementById("reportsTotal");
   const scheduleTotal = document.getElementById("scheduleTotal");
+  const tripTicketsToday = document.getElementById("tripTicketsToday");
+  const completedTrips = document.getElementById("completedTrips");
+  const averageTripDuration = document.getElementById("averageTripDuration");
   const lastSync = document.getElementById("lastSync");
 
   if (activeTrucks) {
-    activeTrucks.textContent = String(stats.activeTrucks || 0);
+    activeTrucks.textContent = formatCount(stats.activeTrucks || 0);
   }
   if (reportsToday) {
-    reportsToday.textContent = String(stats.reportsToday || 0);
+    reportsToday.textContent = formatCount(stats.reportsToday || 0);
   }
   if (reportsTotal) {
-    reportsTotal.textContent = String(stats.reportsTotal || 0);
+    reportsTotal.textContent = formatCount(stats.reportsTotal || 0);
   }
   if (scheduleTotal) {
-    scheduleTotal.textContent = String((payload.schedule || []).length);
+    scheduleTotal.textContent = formatCount((payload.schedule || []).length);
+  }
+  if (tripTicketsToday) {
+    tripTicketsToday.textContent = formatCount(
+      tripAnalytics.ticketsToday ?? stats.tripTicketsToday ?? 0
+    );
+  }
+  if (completedTrips) {
+    completedTrips.textContent = formatCount(
+      tripAnalytics.completedTrips ?? stats.completedTrips ?? 0
+    );
+  }
+  if (averageTripDuration) {
+    const durationLabel = formatDurationMinutes(
+      tripAnalytics.averageDurationMinutes ?? stats.averageTripDurationMinutes ?? 0
+    );
+    averageTripDuration.textContent = durationLabel === "-" ? "0m" : durationLabel;
   }
   if (lastSync) {
     lastSync.textContent = formatDateTime(payload.generatedAt);
@@ -672,6 +728,157 @@ function renderRecentActivity(reports = [], trucks = []) {
       `
     )
     .join("");
+}
+
+function renderTripTicketAnalytics(payload = {}) {
+  const analytics = payload?.tripAnalytics || {};
+  const tripTickets = Array.isArray(payload?.tripTickets) ? payload.tripTickets : [];
+  const tripInsightChips = document.getElementById("tripInsightChips");
+  const tripStatusBars = document.getElementById("tripStatusBars");
+  const zoneBars = document.getElementById("zoneBars");
+  const truckPerformanceList = document.getElementById("truckPerformanceList");
+  const tripTicketTableBody = document.getElementById("tripTicketTableBody");
+
+  if (!tripInsightChips && !tripStatusBars && !zoneBars && !truckPerformanceList && !tripTicketTableBody) {
+    return;
+  }
+
+  if (tripInsightChips) {
+    const chips = [
+      `Completion Rate: ${Number(analytics.completionRate || 0)}%`,
+      `Delayed Trips: ${formatCount(analytics.delayedTrips || 0)}`,
+      `In Progress: ${formatCount(analytics.inProgressTrips || 0)}`,
+      `Total Volume: ${formatKilograms(analytics.totalVolumeKg || 0)}`,
+      `Trucks Covered: ${formatCount(analytics.trucksCovered || 0)}`,
+    ];
+
+    tripInsightChips.innerHTML = chips
+      .map((chip) => `<span class="status-chip">${chip}</span>`)
+      .join("");
+  }
+
+  if (tripStatusBars) {
+    const breakdown = Array.isArray(analytics.statusBreakdown) ? analytics.statusBreakdown : [];
+    const total = breakdown.reduce((sum, item) => sum + Number(item.count || 0), 0);
+
+    if (!breakdown.length) {
+      tripStatusBars.innerHTML = '<p class="empty">No trip ticket status data yet.</p>';
+    } else {
+      tripStatusBars.innerHTML = breakdown
+        .map((item) => {
+          const count = Number(item.count || 0);
+          const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+          return `
+            <article class="bar-item">
+              <div class="bar-label-row"><span>${item.label}</span><strong>${count} (${percent}%)</strong></div>
+              <div class="bar-track"><div class="bar-fill" style="width: ${percent}%"></div></div>
+            </article>
+          `;
+        })
+        .join("");
+    }
+  }
+
+  if (zoneBars) {
+    const breakdown = Array.isArray(analytics.zoneBreakdown) ? analytics.zoneBreakdown : [];
+    const total = breakdown.reduce((sum, item) => sum + Number(item.count || 0), 0);
+
+    if (!breakdown.length) {
+      zoneBars.innerHTML = '<p class="empty">No zone coverage data yet.</p>';
+    } else {
+      zoneBars.innerHTML = breakdown
+        .map((item) => {
+          const count = Number(item.count || 0);
+          const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+          return `
+            <article class="bar-item">
+              <div class="bar-label-row"><span>${item.label}</span><strong>${count} trips</strong></div>
+              <div class="bar-track"><div class="bar-fill" style="width: ${percent}%"></div></div>
+            </article>
+          `;
+        })
+        .join("");
+    }
+  }
+
+  if (truckPerformanceList) {
+    const trucks = Array.isArray(analytics.truckPerformance) ? analytics.truckPerformance : [];
+
+    if (!trucks.length) {
+      truckPerformanceList.innerHTML = '<p class="empty">No truck performance data yet.</p>';
+    } else {
+      truckPerformanceList.innerHTML = trucks
+        .map(
+          (truck) => `
+            <article class="performance-card">
+              <div class="performance-card-header">
+                <div>
+                  <h3>${truck.truckId}</h3>
+                  <p>${truck.driverName || "Driver not assigned"}</p>
+                </div>
+                <span class="status-chip">${truck.completionRate}% complete</span>
+              </div>
+              <div class="performance-card-stats">
+                <div>
+                  <strong>${formatCount(truck.trips)}</strong>
+                  <span>Total tickets</span>
+                </div>
+                <div>
+                  <strong>${formatCount(truck.completedTrips)}</strong>
+                  <span>Finished trips</span>
+                </div>
+                <div>
+                  <strong>${formatCount(truck.delayedTrips)}</strong>
+                  <span>Delayed trips</span>
+                </div>
+                <div>
+                  <strong>${formatKilograms(truck.totalVolumeKg)}</strong>
+                  <span>Total volume</span>
+                </div>
+                <div>
+                  <strong>${formatDurationMinutes(truck.averageDurationMinutes)}</strong>
+                  <span>Average duration</span>
+                </div>
+              </div>
+            </article>
+          `
+        )
+        .join("");
+    }
+  }
+
+  if (tripTicketTableBody) {
+    const filteredTickets = filterBySearch(tripTickets, [
+      (ticket) => ticket.id,
+      (ticket) => ticket.truckId,
+      (ticket) => ticket.driverName,
+      (ticket) => ticket.zone,
+      (ticket) => ticket.status,
+      (ticket) => ticket.wasteType,
+      (ticket) => ticket.remarks,
+    ]);
+
+    if (!filteredTickets.length) {
+      tripTicketTableBody.innerHTML = '<tr><td colspan="8" class="empty">No trip ticket matches your search.</td></tr>';
+    } else {
+      tripTicketTableBody.innerHTML = filteredTickets
+        .map(
+          (ticket) => `
+            <tr>
+              <td>${ticket.id}</td>
+              <td>${ticket.truckId}</td>
+              <td>${ticket.driverName || "-"}</td>
+              <td>${ticket.zone || "-"}</td>
+              <td>${ticket.status || "-"}</td>
+              <td>${formatDurationMinutes(ticket.durationMinutes)}</td>
+              <td>${formatKilograms(ticket.volumeKg)}</td>
+              <td>${formatDateTime(ticket.completedAt || ticket.departureAt)}</td>
+            </tr>
+          `
+        )
+        .join("");
+    }
+  }
 }
 
 function setScheduleForm(schedule = null) {
@@ -1531,6 +1738,7 @@ function applyPayload(payload) {
   renderSchedule(state.payload?.schedule || []);
   renderAnnouncements(state.payload?.announcements || []);
   renderNews(state.payload?.news || []);
+  renderTripTicketAnalytics(state.payload);
   renderRecentActivity(state.payload?.reports || [], state.payload?.trucks || []);
 }
 async function fetchDashboard() {
@@ -1658,9 +1866,10 @@ function setupSearch() {
       renderSchedule(state.payload.schedule || []);
       renderAnnouncements(state.payload.announcements || []);
       renderNews(state.payload.news || []);
+      renderTripTicketAnalytics(state.payload);
     }
 
-  renderDrivers(state.drivers || []);
+    renderDrivers(state.drivers || []);
   });
 }
 
