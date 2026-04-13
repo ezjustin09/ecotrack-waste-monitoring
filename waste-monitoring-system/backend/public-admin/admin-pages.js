@@ -8,6 +8,11 @@ const state = {
   isLoading: false,
   drivers: [],
   tripTickets: [],
+  charts: {
+    tripStatus: null,
+    barangayLoad: null,
+    truckPerformance: null,
+  },
   map: {
     instance: null,
     markers: new Map(),
@@ -94,6 +99,73 @@ function formatKilograms(value) {
   return `${new Intl.NumberFormat("en-PH", {
     maximumFractionDigits: amount >= 100 ? 0 : 1,
   }).format(amount)} kg`;
+}
+
+function destroyAnalyticsChart(chartKey) {
+  const activeChart = state.charts?.[chartKey];
+  if (activeChart && typeof activeChart.destroy === "function") {
+    activeChart.destroy();
+  }
+
+  if (state.charts) {
+    state.charts[chartKey] = null;
+  }
+}
+
+function renderAnalyticsChart(chartKey, options = {}) {
+  const canvas = document.getElementById(options.canvasId || "");
+  const emptyNode = document.getElementById(options.emptyId || "");
+  const labels = Array.isArray(options.labels) ? options.labels : [];
+  const values = Array.isArray(options.values) ? options.values : [];
+  const emptyMessage = options.emptyMessage || "No data available yet.";
+
+  if (!canvas) {
+    return;
+  }
+
+  const hasData = labels.length > 0 && values.length > 0 && values.some((value) => Number(value || 0) > 0);
+
+  if (!window.Chart || !hasData) {
+    destroyAnalyticsChart(chartKey);
+    canvas.classList.add("hidden");
+
+    if (emptyNode) {
+      emptyNode.textContent = emptyMessage;
+      emptyNode.classList.remove("hidden");
+    }
+    return;
+  }
+
+  canvas.classList.remove("hidden");
+  if (emptyNode) {
+    emptyNode.classList.add("hidden");
+  }
+
+  destroyAnalyticsChart(chartKey);
+
+  state.charts[chartKey] = new window.Chart(canvas.getContext("2d"), {
+    type: options.type || "bar",
+    data: {
+      labels,
+      datasets: options.datasets || [],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: {
+          display: options.showLegend !== false,
+          position: options.legendPosition || "bottom",
+          labels: {
+            boxWidth: 12,
+            usePointStyle: true,
+          },
+        },
+      },
+      ...options.chartOptions,
+    },
+  });
 }
 
 function truncate(text, max = 58) {
@@ -749,12 +821,9 @@ function renderTripTicketAnalytics(payload = {}) {
   const analytics = payload?.tripAnalytics || {};
   const tripTickets = Array.isArray(payload?.tripTickets) ? payload.tripTickets : [];
   const tripInsightChips = document.getElementById("tripInsightChips");
-  const tripStatusBars = document.getElementById("tripStatusBars");
-  const zoneBars = document.getElementById("zoneBars");
-  const truckPerformanceList = document.getElementById("truckPerformanceList");
   const tripTicketTableBody = document.getElementById("tripTicketTableBody");
 
-  if (!tripInsightChips && !tripStatusBars && !zoneBars && !truckPerformanceList && !tripTicketTableBody) {
+  if (!tripInsightChips && !tripTicketTableBody) {
     return;
   }
 
@@ -772,102 +841,116 @@ function renderTripTicketAnalytics(payload = {}) {
       .join("");
   }
 
-  if (tripStatusBars) {
-    const breakdown = Array.isArray(analytics.statusBreakdown) ? analytics.statusBreakdown : [];
-    const total = breakdown.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const statusBreakdown = Array.isArray(analytics.statusBreakdown) ? analytics.statusBreakdown : [];
+  const barangayBreakdown = Array.isArray(analytics.barangayBreakdown)
+    ? analytics.barangayBreakdown
+    : Array.isArray(analytics.zoneBreakdown)
+      ? analytics.zoneBreakdown
+      : [];
+  const truckPerformance = Array.isArray(analytics.truckPerformance) ? analytics.truckPerformance.slice(0, 7) : [];
 
-    if (!breakdown.length) {
-      tripStatusBars.innerHTML = '<p class="empty">No trip ticket status data yet.</p>';
-    } else {
-      tripStatusBars.innerHTML = breakdown
-        .map((item) => {
-          const count = Number(item.count || 0);
-          const percent = total > 0 ? Math.round((count / total) * 100) : 0;
-          return `
-            <article class="bar-item">
-              <div class="bar-label-row"><span>${item.label}</span><strong>${count} (${percent}%)</strong></div>
-              <div class="bar-track"><div class="bar-fill" style="width: ${percent}%"></div></div>
-            </article>
-          `;
-        })
-        .join("");
-    }
-  }
+  renderAnalyticsChart("tripStatus", {
+    canvasId: "tripStatusChart",
+    emptyId: "tripStatusChartEmpty",
+    emptyMessage: "No trip ticket status data yet.",
+    type: "doughnut",
+    labels: statusBreakdown.map((item) => item.label),
+    values: statusBreakdown.map((item) => Number(item.count || 0)),
+    datasets: [
+      {
+        data: statusBreakdown.map((item) => Number(item.count || 0)),
+        backgroundColor: ["#16a34a", "#f59e0b", "#2563eb", "#ef4444", "#0f766e", "#7c3aed"],
+        borderWidth: 0,
+      },
+    ],
+    chartOptions: {
+      cutout: "58%",
+    },
+  });
 
-  if (zoneBars) {
-    const breakdown = Array.isArray(analytics.zoneBreakdown) ? analytics.zoneBreakdown : [];
-    const total = breakdown.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  renderAnalyticsChart("barangayLoad", {
+    canvasId: "barangayLoadChart",
+    emptyId: "barangayLoadChartEmpty",
+    emptyMessage: "No barangay coverage data yet.",
+    type: "bar",
+    labels: barangayBreakdown.map((item) => item.label),
+    values: barangayBreakdown.map((item) => Number(item.count || 0)),
+    datasets: [
+      {
+        label: "Trips",
+        data: barangayBreakdown.map((item) => Number(item.count || 0)),
+        backgroundColor: "#2c8e37",
+        borderRadius: 8,
+        maxBarThickness: 34,
+      },
+    ],
+    showLegend: false,
+    chartOptions: {
+      scales: {
+        x: {
+          grid: {
+            display: false,
+          },
+          ticks: {
+            maxRotation: 0,
+            minRotation: 0,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+          },
+        },
+      },
+    },
+  });
 
-    if (!breakdown.length) {
-      zoneBars.innerHTML = '<p class="empty">No zone coverage data yet.</p>';
-    } else {
-      zoneBars.innerHTML = breakdown
-        .map((item) => {
-          const count = Number(item.count || 0);
-          const percent = total > 0 ? Math.round((count / total) * 100) : 0;
-          return `
-            <article class="bar-item">
-              <div class="bar-label-row"><span>${item.label}</span><strong>${count} trips</strong></div>
-              <div class="bar-track"><div class="bar-fill" style="width: ${percent}%"></div></div>
-            </article>
-          `;
-        })
-        .join("");
-    }
-  }
-
-  if (truckPerformanceList) {
-    const trucks = Array.isArray(analytics.truckPerformance) ? analytics.truckPerformance : [];
-
-    if (!trucks.length) {
-      truckPerformanceList.innerHTML = '<p class="empty">No truck performance data yet.</p>';
-    } else {
-      truckPerformanceList.innerHTML = trucks
-        .map(
-          (truck) => `
-            <article class="performance-card">
-              <div class="performance-card-header">
-                <div>
-                  <h3>${truck.truckId}</h3>
-                  <p>${truck.driverName || "Driver not assigned"}</p>
-                </div>
-                <span class="status-chip">${truck.completionRate}% complete</span>
-              </div>
-              <div class="performance-card-stats">
-                <div>
-                  <strong>${formatCount(truck.trips)}</strong>
-                  <span>Total tickets</span>
-                </div>
-                <div>
-                  <strong>${formatCount(truck.completedTrips)}</strong>
-                  <span>Finished trips</span>
-                </div>
-                <div>
-                  <strong>${formatCount(truck.delayedTrips)}</strong>
-                  <span>Delayed trips</span>
-                </div>
-                <div>
-                  <strong>${formatKilograms(truck.totalVolumeKg)}</strong>
-                  <span>Total volume</span>
-                </div>
-                <div>
-                  <strong>${formatDurationMinutes(truck.averageDurationMinutes)}</strong>
-                  <span>Average duration</span>
-                </div>
-              </div>
-            </article>
-          `
-        )
-        .join("");
-    }
-  }
+  renderAnalyticsChart("truckPerformance", {
+    canvasId: "truckPerformanceChart",
+    emptyId: "truckPerformanceChartEmpty",
+    emptyMessage: "No truck performance data yet.",
+    type: "bar",
+    labels: truckPerformance.map((truck) => truck.truckId),
+    values: truckPerformance.map((truck) => Number(truck.trips || 0)),
+    datasets: [
+      {
+        label: "Trips",
+        data: truckPerformance.map((truck) => Number(truck.trips || 0)),
+        backgroundColor: "#0f766e",
+        borderRadius: 8,
+      },
+      {
+        label: "Completion Rate",
+        data: truckPerformance.map((truck) => Number(truck.completionRate || 0)),
+        backgroundColor: "#93c5fd",
+        borderRadius: 8,
+      },
+    ],
+    chartOptions: {
+      indexAxis: "y",
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+          },
+        },
+        y: {
+          grid: {
+            display: false,
+          },
+        },
+      },
+    },
+  });
 
   if (tripTicketTableBody) {
     const filteredTickets = filterBySearch(tripTickets, [
       (ticket) => ticket.id,
       (ticket) => ticket.truckId,
       (ticket) => ticket.driverName,
-      (ticket) => ticket.zone,
+      (ticket) => ticket.barangay || ticket.zone,
       (ticket) => ticket.status,
       (ticket) => ticket.wasteType,
       (ticket) => ticket.remarks,
@@ -883,7 +966,7 @@ function renderTripTicketAnalytics(payload = {}) {
               <td>${ticket.id}</td>
               <td>${ticket.truckId}</td>
               <td>${ticket.driverName || "-"}</td>
-              <td>${ticket.zone || "-"}</td>
+              <td>${ticket.barangay || ticket.zone || "-"}</td>
               <td>${ticket.status || "-"}</td>
               <td>${formatDurationMinutes(ticket.durationMinutes)}</td>
               <td>${formatKilograms(ticket.volumeKg)}</td>
@@ -939,7 +1022,7 @@ function renderTripTicketManagement(tripTickets = []) {
     (ticket) => ticket.id,
     (ticket) => ticket.truckId,
     (ticket) => ticket.driverName,
-    (ticket) => ticket.zone,
+    (ticket) => ticket.barangay || ticket.zone,
     (ticket) => ticket.wasteType,
     (ticket) => ticket.scheduledWindow,
     (ticket) => ticket.status,
@@ -962,7 +1045,7 @@ function renderTripTicketManagement(tripTickets = []) {
           <td>${ticket.id}</td>
           <td>${ticket.truckId || "-"}</td>
           <td>${ticket.driverName || "-"}</td>
-          <td>${ticket.zone || "-"}</td>
+          <td>${ticket.barangay || ticket.zone || "-"}</td>
           <td>${ticket.wasteType || "-"}${ticket.remarks ? `<br /><small>${truncate(ticket.remarks, 44)}</small>` : ""}</td>
           <td>${ticket.scheduledWindow || "-"}</td>
           <td>${formatDateTime(ticket.departureAt)}</td>
@@ -984,7 +1067,7 @@ function setTripTicketForm(ticket = null) {
   const idInput = document.getElementById("tripTicketEditingId");
   const truckIdInput = document.getElementById("tripTicketTruckId");
   const driverNameInput = document.getElementById("tripTicketDriverName");
-  const zoneInput = document.getElementById("tripTicketZone");
+  const barangayInput = document.getElementById("tripTicketBarangay");
   const wasteTypeInput = document.getElementById("tripTicketWasteType");
   const scheduledWindowInput = document.getElementById("tripTicketScheduledWindow");
   const departureAtInput = document.getElementById("tripTicketDepartureAt");
@@ -998,7 +1081,7 @@ function setTripTicketForm(ticket = null) {
     !idInput ||
     !truckIdInput ||
     !driverNameInput ||
-    !zoneInput ||
+    !barangayInput ||
     !wasteTypeInput ||
     !scheduledWindowInput ||
     !departureAtInput ||
@@ -1014,7 +1097,7 @@ function setTripTicketForm(ticket = null) {
     idInput.value = "";
     truckIdInput.value = "";
     driverNameInput.value = "";
-    zoneInput.value = "";
+    barangayInput.value = "";
     wasteTypeInput.value = "";
     scheduledWindowInput.value = "";
     departureAtInput.value = "";
@@ -1031,7 +1114,7 @@ function setTripTicketForm(ticket = null) {
   idInput.value = ticket.id || "";
   truckIdInput.value = ticket.truckId || "";
   driverNameInput.value = ticket.driverName || "";
-  zoneInput.value = ticket.zone || "";
+  barangayInput.value = ticket.barangay || ticket.zone || "";
   wasteTypeInput.value = ticket.wasteType || "";
   scheduledWindowInput.value = ticket.scheduledWindow || "";
   departureAtInput.value = formatDateTimeInputValue(ticket.departureAt);
@@ -1134,7 +1217,7 @@ function setupTripTicketManagement() {
     const body = {
       truckId: String(document.getElementById("tripTicketTruckId")?.value || "").trim(),
       driverName: String(document.getElementById("tripTicketDriverName")?.value || "").trim(),
-      zone: String(document.getElementById("tripTicketZone")?.value || "").trim(),
+      barangay: String(document.getElementById("tripTicketBarangay")?.value || "").trim(),
       wasteType: String(document.getElementById("tripTicketWasteType")?.value || "").trim(),
       scheduledWindow: String(document.getElementById("tripTicketScheduledWindow")?.value || "").trim(),
       departureAt: document.getElementById("tripTicketDepartureAt")?.value
@@ -1148,8 +1231,8 @@ function setupTripTicketManagement() {
       remarks: String(document.getElementById("tripTicketRemarks")?.value || "").trim(),
     };
 
-    if (!body.truckId || !body.driverName || !body.zone || !body.wasteType || !body.scheduledWindow || !body.departureAt) {
-      showTripTicketMessage("Please fill truck, driver, zone, waste type, schedule window, and departure time.", true);
+    if (!body.truckId || !body.driverName || !body.barangay || !body.wasteType || !body.scheduledWindow || !body.departureAt) {
+      showTripTicketMessage("Please fill truck, driver, barangay, waste type, schedule window, and departure time.", true);
       return;
     }
 

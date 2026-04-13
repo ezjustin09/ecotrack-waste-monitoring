@@ -522,11 +522,14 @@ function getTripTicketDurationMinutes(ticket) {
 }
 
 function sanitizeTripTicket(ticket) {
+  const barangay = ticket.barangay || ticket.zone || "";
+
   return {
     id: ticket.id,
     truckId: ticket.truckId,
     driverName: ticket.driverName || "",
-    zone: ticket.zone || "",
+    barangay,
+    zone: barangay,
     wasteType: ticket.wasteType || "",
     scheduledWindow: ticket.scheduledWindow || "",
     departureAt: toIsoString(ticket.departureAt),
@@ -654,7 +657,7 @@ function buildTripTicketAnalytics(tripTickets = []) {
     totalVolumeKg: 0,
     trucksCovered: 0,
     statusBreakdown: [],
-    zoneBreakdown: [],
+    barangayBreakdown: [],
     truckPerformance: [],
   };
 
@@ -664,7 +667,7 @@ function buildTripTicketAnalytics(tripTickets = []) {
 
   const durations = [];
   const statusCounts = new Map();
-  const zoneCounts = new Map();
+  const barangayCounts = new Map();
   const truckStats = new Map();
 
   tripTickets.forEach((ticket) => {
@@ -697,8 +700,10 @@ function buildTripTicketAnalytics(tripTickets = []) {
       durations.push(durationMinutes);
     }
 
+    const barangay = String(ticket.barangay || ticket.zone || "").trim() || "Unknown barangay";
+
     statusCounts.set(status, (statusCounts.get(status) || 0) + 1);
-    zoneCounts.set(ticket.zone, (zoneCounts.get(ticket.zone) || 0) + 1);
+    barangayCounts.set(barangay, (barangayCounts.get(barangay) || 0) + 1);
 
     const truckKey = ticket.truckId || "Unknown";
     const currentTruck = truckStats.get(truckKey) || {
@@ -737,8 +742,8 @@ function buildTripTicketAnalytics(tripTickets = []) {
     .map(([status, count]) => ({ label: status, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
-  summary.zoneBreakdown = Array.from(zoneCounts.entries())
-    .map(([zone, count]) => ({ label: zone || "Unknown zone", count }))
+  summary.barangayBreakdown = Array.from(barangayCounts.entries())
+    .map(([barangay, count]) => ({ label: barangay || "Unknown barangay", count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   summary.truckPerformance = Array.from(truckStats.values())
@@ -2139,7 +2144,7 @@ function normalizeFeedPayload(payload = {}) {
 function normalizeTripTicketPayload(payload = {}) {
   const truckId = normalizeTruckId(payload.truckId);
   const driverName = String(payload.driverName || "").trim();
-  const zone = String(payload.zone || "").trim();
+  const barangay = String(payload.barangay || payload.zone || "").trim();
   const wasteType = String(payload.wasteType || "").trim();
   const scheduledWindow = String(payload.scheduledWindow || "").trim();
   const remarks = String(payload.remarks || "").trim();
@@ -2152,9 +2157,9 @@ function normalizeTripTicketPayload(payload = {}) {
   const departureAt = payload.departureAt ? new Date(payload.departureAt) : null;
   const completedAt = payload.completedAt ? new Date(payload.completedAt) : null;
 
-  if (!truckId || !driverName || !zone || !wasteType || !scheduledWindow || !departureAt) {
+  if (!truckId || !driverName || !barangay || !wasteType || !scheduledWindow || !departureAt) {
     return {
-      error: "truckId, driverName, zone, wasteType, scheduledWindow, and departureAt are required",
+      error: "truckId, driverName, barangay, wasteType, scheduledWindow, and departureAt are required",
     };
   }
 
@@ -2203,7 +2208,7 @@ function normalizeTripTicketPayload(payload = {}) {
   return {
     truckId,
     driverName,
-    zone,
+    barangay,
     wasteType,
     scheduledWindow,
     departureAt,
@@ -2549,7 +2554,7 @@ async function connectDatabase() {
     tripTicketsCollection.createIndex({ id: 1 }, { unique: true }),
     tripTicketsCollection.createIndex({ departureAt: -1 }),
     tripTicketsCollection.createIndex({ truckId: 1, departureAt: -1 }),
-    tripTicketsCollection.createIndex({ zone: 1 }),
+    tripTicketsCollection.createIndex({ barangay: 1 }),
     userSessionsCollection.createIndex({ token: 1 }, { unique: true }),
     userSessionsCollection.createIndex({ userId: 1 }),
     userSessionsCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
@@ -3095,7 +3100,7 @@ app.post(
       id: await nextTripTicketId(),
       truckId: payload.truckId,
       driverName: payload.driverName,
-      zone: payload.zone,
+      barangay: payload.barangay,
       wasteType: payload.wasteType,
       scheduledWindow: payload.scheduledWindow,
       departureAt: payload.departureAt,
@@ -3154,7 +3159,7 @@ app.put(
         $set: {
           truckId: payload.truckId,
           driverName: payload.driverName,
-          zone: payload.zone,
+          barangay: payload.barangay,
           wasteType: payload.wasteType,
           scheduledWindow: payload.scheduledWindow,
           departureAt: payload.departureAt,

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Analytics</title>
-    <link rel="stylesheet" href="/admin/styles.css?v=20260413a" />
+    <link rel="stylesheet" href="/admin/styles.css?v=20260413b" />
   </head>
   <body data-page="analytics">
     <div class="admin-shell">
@@ -31,7 +31,7 @@
           <div class="topbar-right">
             <label class="search-box">
               <span>Search</span>
-              <input id="searchInput" type="search" placeholder="Search ticket, truck, driver, zone" />
+              <input id="searchInput" type="search" placeholder="Search ticket, truck, driver, barangay" />
             </label>
             <button id="logoutButton" class="logout-button" type="button">Log out</button>
           </div>
@@ -68,21 +68,30 @@
                 <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
               </div>
               <div id="tripInsightChips" class="status-chips"></div>
-              <div id="tripStatusBars" class="bar-list"></div>
+              <div class="analytics-chart-shell">
+                <canvas id="tripStatusChart" aria-label="Trip ticket status chart"></canvas>
+                <p id="tripStatusChartEmpty" class="empty hidden">No trip ticket status data yet.</p>
+              </div>
             </article>
 
             <article class="card panel">
               <div class="panel-heading">
-                <h2>Zone Collection Load</h2>
+                <h2>Barangay Collection Load</h2>
               </div>
-              <div id="zoneBars" class="bar-list"></div>
+              <div class="analytics-chart-shell">
+                <canvas id="barangayLoadChart" aria-label="Barangay collection chart"></canvas>
+                <p id="barangayLoadChartEmpty" class="empty hidden">No barangay coverage data yet.</p>
+              </div>
             </article>
 
             <article class="card panel panel-wide">
               <div class="panel-heading">
                 <h2>Truck Performance</h2>
               </div>
-              <div id="truckPerformanceList" class="analytics-performance-grid"></div>
+              <div class="analytics-chart-shell analytics-chart-shell-wide">
+                <canvas id="truckPerformanceChart" aria-label="Truck performance chart"></canvas>
+                <p id="truckPerformanceChartEmpty" class="empty hidden">No truck performance data yet.</p>
+              </div>
             </article>
 
             <article class="card panel panel-wide">
@@ -96,7 +105,7 @@
                       <th>Ticket ID</th>
                       <th>Truck</th>
                       <th>Driver</th>
-                      <th>Zone</th>
+                      <th>Barangay</th>
                       <th>Status</th>
                       <th>Duration</th>
                       <th>Volume</th>
@@ -113,7 +122,8 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/admin/admin-pages.js?v=20260412e" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/admin/admin-pages.js?v=20260413b" defer></script>
   </body>
 </html>
 

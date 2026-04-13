@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Trip Tickets</title>
-    <link rel="stylesheet" href="/admin/styles.css?v=20260413a" />
+    <link rel="stylesheet" href="/admin/styles.css?v=20260413b" />
   </head>
   <body data-page="trip-tickets">
     <div class="admin-shell">
@@ -31,7 +31,7 @@
           <div class="topbar-right">
             <label class="search-box">
               <span>Search</span>
-              <input id="searchInput" type="search" placeholder="Search ticket, truck, driver, zone" />
+              <input id="searchInput" type="search" placeholder="Search ticket, truck, driver, barangay" />
             </label>
             <button id="logoutButton" class="logout-button" type="button">Log out</button>
           </div>
@@ -59,8 +59,8 @@
                 </label>
 
                 <label class="form-field">
-                  <span>Zone or Route</span>
-                  <input id="tripTicketZone" type="text" placeholder="Zone 2 - Central Pateros" required />
+                  <span>Barangay</span>
+                  <input id="tripTicketBarangay" type="text" placeholder="San Pedro" required />
                 </label>
 
                 <label class="form-field">
@@ -128,7 +128,7 @@
                     <th>Ticket ID</th>
                     <th>Truck ID</th>
                     <th>Driver</th>
-                    <th>Zone</th>
+                    <th>Barangay</th>
                     <th>Waste Type</th>
                     <th>Window</th>
                     <th>Departure</th>
@@ -146,6 +146,6 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/admin/admin-pages.js?v=20260412e" defer></script>
+    <script src="/admin/admin-pages.js?v=20260413b" defer></script>
   </body>
 </html>
