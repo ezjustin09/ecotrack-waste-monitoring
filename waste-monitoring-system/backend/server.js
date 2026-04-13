@@ -384,6 +384,7 @@ const DEFAULT_TRIP_TICKET_TEMPLATES = [
     remarks: "Ticket marked missed due to truck maintenance check.",
   },
 ];
+const DEFAULT_TRIP_TICKET_IDS = DEFAULT_TRIP_TICKET_TEMPLATES.map((template) => template.id);
 
 function createRelativeDate(dayOffset, hour, minute) {
   const date = new Date();
@@ -2587,9 +2588,14 @@ async function connectDatabase() {
     );
   }
 
-  const tripTicketCount = await tripTicketsCollection.countDocuments();
-  if (tripTicketCount === 0) {
-    await tripTicketsCollection.insertMany(buildDefaultTripTickets());
+  if (DEFAULT_TRIP_TICKET_IDS.length > 0) {
+    const cleanupResult = await tripTicketsCollection.deleteMany({
+      id: { $in: DEFAULT_TRIP_TICKET_IDS },
+    });
+
+    if (cleanupResult.deletedCount > 0) {
+      console.log(`[trip-tickets] Removed ${cleanupResult.deletedCount} seeded demo trip ticket(s).`);
+    }
   }
 
   const [maxUserCounter, maxReportCounter, maxScheduleCounter, maxAnnouncementCounter, maxNewsCounter, maxTripTicketCounter] = await Promise.all([
