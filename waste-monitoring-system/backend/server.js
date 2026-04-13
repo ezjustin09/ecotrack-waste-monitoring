@@ -74,6 +74,12 @@ const USER_SESSION_TTL_MS = Number(process.env.USER_SESSION_TTL_MS || 30 * 24 * 
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_TTL_MS || 12 * 60 * 60 * 1000);
 const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
 const INCLUDE_RESET_CODE_IN_RESPONSE = process.env.NODE_ENV !== "production";
+const RESEND_API_URL = String(process.env.RESEND_API_URL || "https://api.resend.com/emails").trim() || "https://api.resend.com/emails";
+const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
+const RESEND_FROM = String(process.env.RESEND_FROM || "").trim();
+const RESEND_FROM_NAME = String(process.env.RESEND_FROM_NAME || "EcoTrack Waste Monitoring").trim();
+const RESEND_REPLY_TO = String(process.env.RESEND_REPLY_TO || "").trim();
+const RESEND_EMAIL_ENABLED = Boolean(RESEND_API_KEY && RESEND_FROM);
 const SMTP_HOST = String(process.env.SMTP_HOST || "smtp.gmail.com").trim() || "smtp.gmail.com";
 const parsedSmtpPort = Number(process.env.SMTP_PORT || 587);
 const SMTP_PORT = Number.isFinite(parsedSmtpPort) && parsedSmtpPort > 0 ? parsedSmtpPort : 587;
@@ -904,7 +910,7 @@ function validateProductionConfiguration() {
   }
 
   if (!isEmailSendingConfigured()) {
-    console.warn("[mail] SMTP is not configured. Forgot-password emails will fail until SMTP_USER/SMTP_PASS/SMTP_FROM are set.");
+    console.warn("[mail] Forgot-password email is not configured. Set RESEND_API_KEY and RESEND_FROM, or SMTP_USER/SMTP_PASS/SMTP_FROM.");
   }
 }
 
@@ -1857,7 +1863,19 @@ async function processNearbyTruckAlerts(truck) {
 }
 
 function isEmailSendingConfigured() {
-  return EMAIL_SENDING_ENABLED && Boolean(mailTransporter);
+  return RESEND_EMAIL_ENABLED || (EMAIL_SENDING_ENABLED && Boolean(mailTransporter));
+}
+
+function getConfiguredEmailProviderLabel() {
+  if (RESEND_EMAIL_ENABLED) {
+    return "Resend API";
+  }
+
+  if (EMAIL_SENDING_ENABLED && mailTransporter) {
+    return `${SMTP_HOST}:${SMTP_PORT}`;
+  }
+
+  return "";
 }
 
 function buildPasswordResetEmailText(resetCode) {
@@ -1890,6 +1908,51 @@ function buildPasswordResetEmailHtml(resetCode) {
 
 async function sendPasswordResetCodeEmail(email, resetCode) {
   if (!isEmailSendingConfigured()) {
+    throw new Error("Forgot-password email delivery is not configured.");
+  }
+
+  if (RESEND_EMAIL_ENABLED) {
+    const fromValue = RESEND_FROM.includes("<")
+      ? RESEND_FROM
+      : `${RESEND_FROM_NAME} <${RESEND_FROM}>`;
+
+    const response = await fetch(RESEND_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromValue,
+        to: [email],
+        subject: "EcoTrack password reset code",
+        text: buildPasswordResetEmailText(resetCode),
+        html: buildPasswordResetEmailHtml(resetCode),
+        ...(RESEND_REPLY_TO ? { reply_to: RESEND_REPLY_TO } : {}),
+      }),
+    });
+
+    const responseText = await response.text();
+    let payload = {};
+
+    try {
+      payload = responseText ? JSON.parse(responseText) : {};
+    } catch (error) {
+      payload = {};
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        payload?.message ||
+          payload?.error ||
+          `Resend email API failed with status ${response.status}${responseText ? `: ${responseText.slice(0, 240)}` : ""}`
+      );
+    }
+
+    return payload;
+  }
+
+  if (!mailTransporter) {
     throw new Error("SMTP mail transport is not configured.");
   }
 
@@ -4050,9 +4113,9 @@ async function startServer() {
     await connectDatabase();
 
     if (isEmailSendingConfigured()) {
-      console.log(`[mail] Forgot-password email delivery enabled via ${SMTP_HOST}:${SMTP_PORT}.`);
+      console.log(`[mail] Forgot-password email delivery enabled via ${getConfiguredEmailProviderLabel()}.`);
     } else {
-      console.log("[mail] Forgot-password emails are disabled. Set SMTP_USER, SMTP_PASS, and SMTP_FROM to enable Gmail delivery.");
+      console.log("[mail] Forgot-password emails are disabled. Set RESEND_API_KEY and RESEND_FROM, or SMTP_USER/SMTP_PASS/SMTP_FROM.");
     }
 
     server.listen(PORT, HOST, () => {
