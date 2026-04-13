@@ -17,8 +17,12 @@ import { createTruckSocket } from "./src/services/socket";
 import { buildNavigationTheme } from "./src/utils/appTheme";
 
 const ONBOARDING_STORAGE_KEY = "ecotrack:onboarding:completed";
+const SESSION_STORAGE_KEY = "ecotrack:session";
 let asyncStorageModule = null;
 const onboardingInMemoryStore = {
+  value: null,
+};
+const sessionInMemoryStore = {
   value: null,
 };
 
@@ -55,6 +59,63 @@ async function setOnboardingFlag(value) {
   onboardingInMemoryStore.value = value;
 }
 
+async function getStoredSession() {
+  if (asyncStorageModule?.getItem) {
+    try {
+      const rawValue = await asyncStorageModule.getItem(SESSION_STORAGE_KEY);
+
+      if (!rawValue) {
+        return null;
+      }
+
+      const parsed = JSON.parse(rawValue);
+      if (!parsed?.token || !parsed?.user) {
+        return null;
+      }
+
+      return parsed;
+    } catch (error) {
+      console.warn("Unable to read saved session:", error?.message || error);
+    }
+  }
+
+  return sessionInMemoryStore.value;
+}
+
+async function persistSession(session) {
+  if (!session?.token || !session?.user) {
+    if (asyncStorageModule?.removeItem) {
+      try {
+        await asyncStorageModule.removeItem(SESSION_STORAGE_KEY);
+      } catch (error) {
+        console.warn("Unable to clear saved session:", error?.message || error);
+      }
+    }
+
+    sessionInMemoryStore.value = null;
+    return;
+  }
+
+  const serializedSession = JSON.stringify({
+    token: session.token,
+    user: session.user,
+  });
+
+  if (asyncStorageModule?.setItem) {
+    try {
+      await asyncStorageModule.setItem(SESSION_STORAGE_KEY, serializedSession);
+      return;
+    } catch (error) {
+      console.warn("Unable to persist session:", error?.message || error);
+    }
+  }
+
+  sessionInMemoryStore.value = {
+    token: session.token,
+    user: session.user,
+  };
+}
+
 function AppShell() {
   const { colors, feedNotificationsEnabled, isDarkMode, isReady: preferencesReady } = usePreferences();
   const [session, setSession] = useState(null);
@@ -68,10 +129,11 @@ function AppShell() {
 
     async function restoreAppState() {
       try {
-        const onboardingValue = await getOnboardingFlag();
+        const [onboardingValue, savedSession] = await Promise.all([getOnboardingFlag(), getStoredSession()]);
 
         if (mounted) {
           setHasSeenOnboarding(onboardingValue === "1");
+          setSession(savedSession);
         }
       } finally {
         if (mounted) {
@@ -89,6 +151,7 @@ function AppShell() {
 
   function handleAuthenticated(nextSession) {
     setSession(nextSession);
+    persistSession(nextSession).catch(() => {});
   }
 
   function handleSignOut() {
@@ -106,6 +169,7 @@ function AppShell() {
     lastRegisteredPushTokenRef.current = "";
     currentPushTokenRef.current = "";
     setSession(null);
+    persistSession(null).catch(() => {});
   }
 
   async function handleCompleteOnboarding() {
