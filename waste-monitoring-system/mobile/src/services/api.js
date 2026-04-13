@@ -87,13 +87,51 @@ function resolveApiBaseUrl() {
 export const API_BASE_URL = resolveApiBaseUrl();
 
 async function parseJsonResponse(response) {
-  const payload = await response.json();
+  const rawBody = await response.text();
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  let payload = null;
 
-  if (!response.ok) {
-    throw new Error(payload.error || "Request failed");
+  if (rawBody) {
+    const trimmedBody = rawBody.trim();
+    const looksLikeJson =
+      contentType.includes("application/json") ||
+      trimmedBody.startsWith("{") ||
+      trimmedBody.startsWith("[");
+
+    if (looksLikeJson) {
+      try {
+        payload = JSON.parse(trimmedBody);
+      } catch (error) {
+        payload = null;
+      }
+    }
   }
 
-  return payload;
+  if (!response.ok) {
+    if (payload?.error) {
+      throw new Error(payload.error);
+    }
+
+    if (response.status === 413) {
+      throw new Error("Attached image is too large. Please choose a smaller photo and try again.");
+    }
+
+    if (rawBody.trim().startsWith("<")) {
+      throw new Error("Server returned an unexpected response. Please try again in a moment.");
+    }
+
+    throw new Error(rawBody.trim() || `Request failed (${response.status})`);
+  }
+
+  if (payload !== null) {
+    return payload;
+  }
+
+  if (!rawBody) {
+    return {};
+  }
+
+  throw new Error("Server returned an unexpected response.");
 }
 
 function buildHeaders(token) {

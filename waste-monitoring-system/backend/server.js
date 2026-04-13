@@ -73,6 +73,7 @@ const ADMIN_PASSWORD_HASH = String(process.env.ADMIN_PASSWORD_HASH || "").trim()
 const USER_SESSION_TTL_MS = Number(process.env.USER_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000);
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_TTL_MS || 12 * 60 * 60 * 1000);
 const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const REQUEST_BODY_LIMIT = String(process.env.REQUEST_BODY_LIMIT || "12mb").trim() || "12mb";
 const INCLUDE_RESET_CODE_IN_RESPONSE = process.env.NODE_ENV !== "production";
 const RESEND_API_URL = String(process.env.RESEND_API_URL || "https://api.resend.com/emails").trim() || "https://api.resend.com/emails";
 const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
@@ -162,7 +163,25 @@ const io = new Server(server, {
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
+app.use((error, req, res, next) => {
+  if (error?.type === "entity.too.large") {
+    res.status(413).json({
+      error: "Attached image is too large. Please choose a smaller photo and try again.",
+    });
+    return;
+  }
+
+  if (error instanceof SyntaxError && error?.status === 400 && "body" in error) {
+    res.status(400).json({
+      error: "Invalid request format. Please try submitting the report again.",
+    });
+    return;
+  }
+
+  next(error);
+});
 
 const trucks = new Map();
 
