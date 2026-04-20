@@ -3,12 +3,12 @@ import {
   ActivityIndicator,
   Animated,
   PanResponder,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  Platform,
   View,
 } from "react-native";
 import * as Location from "expo-location";
@@ -28,7 +28,7 @@ import {
   getNearbyTruckAlertsStatusAsync,
 } from "../services/notifications";
 import { createTruckSocket } from "../services/socket";
-import { MAP_STYLE } from "../utils/mapTheme";
+import { DARK_MAP_STYLE, LIGHT_MAP_STYLE } from "../utils/mapTheme";
 import { buildMapRegion } from "../utils/region";
 import { getTruckStatusMeta } from "../utils/truckStatus";
 
@@ -126,7 +126,7 @@ function describeAlertAccess(alertAccess, alertsEnabled) {
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { token, user, signOut } = useAuth();
-  const { feedNotificationsEnabled, setFeedNotificationsEnabled } = usePreferences();
+  const { colors, isDarkMode, feedNotificationsEnabled, setFeedNotificationsEnabled } = usePreferences();
   const mapRef = useRef(null);
   const fittedOnceRef = useRef(false);
   const lastSyncedAlertLocationRef = useRef(null);
@@ -157,7 +157,10 @@ export default function MapScreen() {
     }),
     [trucks]
   );
-  const mapStyle = useMemo(() => (Platform.OS === "android" ? undefined : MAP_STYLE), []);
+  const mapStyle = useMemo(
+    () => (isDarkMode ? DARK_MAP_STYLE : Platform.OS === "android" ? LIGHT_MAP_STYLE : LIGHT_MAP_STYLE),
+    [isDarkMode]
+  );
   const nearbyTruckCount = useMemo(() => {
     if (!userLocation) {
       return 0;
@@ -498,9 +501,9 @@ export default function MapScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0f766e" />
-        <Text style={styles.loadingText}>Loading live garbage truck activity...</Text>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading live garbage truck activity...</Text>
       </View>
     );
   }
@@ -509,7 +512,7 @@ export default function MapScreen() {
   const actionStackTop = insets.top + 20;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <MapView
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
@@ -534,23 +537,29 @@ export default function MapScreen() {
 
       <View style={[styles.actionStack, { top: actionStackTop }]}>
         <Pressable
-          style={[styles.actionButton, alertsEnabled && styles.actionButtonActive]}
+          style={[
+            styles.actionButton,
+            {
+              backgroundColor: isDarkMode ? colors.card : "rgba(255,255,255,0.96)",
+            },
+            alertsEnabled && [styles.actionButtonActive, { backgroundColor: colors.primary }],
+          ]}
           onPress={toggleNearbyAlerts}
         >
           <Ionicons
             name={alertsEnabled ? "notifications" : "notifications-outline"}
             size={20}
-            color={alertsEnabled ? "#ffffff" : "#0f172a"}
+            color={alertsEnabled ? "#ffffff" : colors.text}
           />
         </Pressable>
-        <Pressable style={styles.actionButton} onPress={focusFleet}>
-          <Ionicons name="scan-outline" size={20} color="#0f172a" />
+        <Pressable style={[styles.actionButton, { backgroundColor: isDarkMode ? colors.card : "rgba(255,255,255,0.96)" }]} onPress={focusFleet}>
+          <Ionicons name="scan-outline" size={20} color={colors.text} />
         </Pressable>
-        <Pressable style={styles.actionButton} onPress={focusUser}>
-          <Ionicons name="locate-outline" size={20} color="#0f172a" />
+        <Pressable style={[styles.actionButton, { backgroundColor: isDarkMode ? colors.card : "rgba(255,255,255,0.96)" }]} onPress={focusUser}>
+          <Ionicons name="locate-outline" size={20} color={colors.text} />
         </Pressable>
-        <Pressable style={styles.actionButton} onPress={() => loadTrucks(true)}>
-          <Ionicons name="refresh-outline" size={20} color="#0f172a" />
+        <Pressable style={[styles.actionButton, { backgroundColor: isDarkMode ? colors.card : "rgba(255,255,255,0.96)" }]} onPress={() => loadTrucks(true)}>
+          <Ionicons name="refresh-outline" size={20} color={colors.text} />
         </Pressable>
       </View>
 
@@ -558,17 +567,18 @@ export default function MapScreen() {
         style={[
           styles.bottomSheet,
           {
+            backgroundColor: isDarkMode ? "rgba(17,24,39,0.98)" : "rgba(255,255,255,0.98)",
             paddingBottom: Math.max(insets.bottom, 14) + 10,
             transform: [{ translateY: sheetTranslateY }],
           },
         ]}
       >
         <View style={styles.sheetGrabArea} {...sheetPanResponder.panHandlers}>
-          <View style={styles.sheetHandle} />
+          <View style={[styles.sheetHandle, { backgroundColor: isDarkMode ? colors.border : "#d1d5db" }]} />
           <View style={styles.sheetHeaderRow}>
             <View>
-              <Text style={styles.sheetTitle}>Garbage Truck Activity</Text>
-              <Text style={styles.sheetSubtitle}>
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>Garbage Truck Activity</Text>
+              <Text style={[styles.sheetSubtitle, { color: colors.textMuted }]}>
                 {isSheetCollapsed ? "Swipe up to reopen the fleet list." : "Swipe down to minimize the fleet list."}
               </Text>
             </View>
@@ -583,16 +593,20 @@ export default function MapScreen() {
           </View>
         </View>
 
-        {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
+        {errorMessage ? (
+          <Text style={[styles.errorBanner, { backgroundColor: colors.dangerSoft, color: colors.danger }]}>{errorMessage}</Text>
+        ) : null}
         {!errorMessage && trucks.length === 0 ? (
-          <Text style={styles.emptyBanner}>No active trucks yet. Ask a driver to start Live GPS Sharing.</Text>
+          <Text style={[styles.emptyBanner, { backgroundColor: colors.overlay, color: colors.primary }]}>
+            No active trucks yet. Ask a driver to start Live GPS Sharing.
+          </Text>
         ) : null}
 
         {!isSheetCollapsed ? (
           <ScrollView
             contentContainerStyle={styles.listContent}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => loadTrucks(true)} tintColor="#0f766e" />
+              <RefreshControl refreshing={refreshing} onRefresh={() => loadTrucks(true)} tintColor={colors.primary} />
             }
             showsVerticalScrollIndicator={false}
           >
@@ -603,7 +617,20 @@ export default function MapScreen() {
               return (
                 <Pressable
                   key={truck.truckId}
-                  style={[styles.truckRow, selected && styles.truckRowSelected]}
+                  style={[
+                    styles.truckRow,
+                    {
+                      backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc",
+                      borderColor: isDarkMode ? colors.borderSoft : "#e2e8f0",
+                    },
+                    selected && [
+                      styles.truckRowSelected,
+                      {
+                        borderColor: colors.primary,
+                        backgroundColor: isDarkMode ? colors.overlay : "#f0fdfa",
+                      },
+                    ],
+                  ]}
                   onPress={() => focusTruck(truck)}
                 >
                   <View style={styles.truckRowLeft}>
@@ -611,8 +638,8 @@ export default function MapScreen() {
                       <MaterialCommunityIcons name="truck-fast-outline" size={18} color={statusMeta.color} />
                     </View>
                     <View>
-                      <Text style={styles.truckId}>{truck.truckId}</Text>
-                      <Text style={styles.coordinates}>
+                      <Text style={[styles.truckId, { color: colors.text }]}>{truck.truckId}</Text>
+                      <Text style={[styles.coordinates, { color: colors.textMuted }]}>
                         {truck.latitude.toFixed(4)}, {truck.longitude.toFixed(4)}
                       </Text>
                     </View>
@@ -622,7 +649,7 @@ export default function MapScreen() {
                     <View style={[styles.statusTag, { backgroundColor: statusMeta.soft }]}>
                       <Text style={[styles.statusTagText, { color: statusMeta.color }]}>{truck.status}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                   </View>
                 </Pressable>
               );
@@ -630,8 +657,10 @@ export default function MapScreen() {
           </ScrollView>
         ) : (
           <View style={styles.collapsedSummary}>
-            <Text style={styles.collapsedSummaryText}>{fleetCounts.total} trucks live</Text>
-            <Text style={styles.collapsedSummaryMeta}>Swipe up on the handle to reopen the fleet list.</Text>
+            <Text style={[styles.collapsedSummaryText, { color: colors.text }]}>{fleetCounts.total} trucks live</Text>
+            <Text style={[styles.collapsedSummaryMeta, { color: colors.textMuted }]}>
+              Swipe up on the handle to reopen the fleet list.
+            </Text>
           </View>
         )}
       </Animated.View>

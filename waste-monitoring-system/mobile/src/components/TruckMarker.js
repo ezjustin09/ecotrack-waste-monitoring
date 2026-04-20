@@ -60,12 +60,12 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   markerImage: {
-    width: 72,
-    height: 92,
+    width: 64,
+    height: 82,
   },
   markerImageSelected: {
-    width: 78,
-    height: 98,
+    width: 70,
+    height: 88,
   },
   callout: {
     backgroundColor: "#ffffff",

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,17 +21,207 @@ const iconMap = {
   Report: "warning",
 };
 
+function getTabLabel(route, descriptor) {
+  const tabBarLabel = descriptor?.options?.tabBarLabel;
+
+  if (typeof tabBarLabel === "string") {
+    return tabBarLabel;
+  }
+
+  if (typeof descriptor?.options?.title === "string") {
+    return descriptor.options.title;
+  }
+
+  return route.name;
+}
+
+function AnimatedTabItem({
+  label,
+  iconName,
+  focused,
+  colors,
+  isDarkMode,
+  onPress,
+  onLongPress,
+  accessibilityState,
+  accessibilityLabel,
+  testID,
+}) {
+  const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(progress, {
+      toValue: focused ? 1 : 0,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 120,
+    }).start();
+  }, [focused, progress]);
+
+  const iconTranslateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -5],
+  });
+  const iconScale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
+  const labelOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.82, 1],
+  });
+  const labelTranslateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [2, 0],
+  });
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="button"
+      accessibilityState={accessibilityState}
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+      style={styles.tabItem}
+    >
+      <Animated.View
+        style={[
+          styles.tabIconBubble,
+          {
+            backgroundColor: focused ? colors.primary : isDarkMode ? colors.cardMuted : "#f8fafc",
+            borderColor: focused
+              ? colors.primary
+              : isDarkMode
+                ? "rgba(255,255,255,0.04)"
+                : "rgba(15,23,42,0.04)",
+            transform: [{ translateY: iconTranslateY }, { scale: iconScale }],
+          },
+        ]}
+      >
+        <Ionicons name={iconName} size={20} color={focused ? "#ffffff" : colors.textMuted} />
+      </Animated.View>
+      <Animated.Text
+        style={[
+          styles.tabLabel,
+          {
+            color: focused ? colors.primary : colors.textMuted,
+            opacity: labelOpacity,
+            transform: [{ translateY: labelTranslateY }],
+          },
+        ]}
+      >
+        {label}
+      </Animated.Text>
+    </Pressable>
+  );
+}
+
+function AnimatedTabBar({ state, descriptors, navigation, colors, isDarkMode, tabBarBottomPadding }) {
+  const { width } = useWindowDimensions();
+  const indicatorTranslateX = useRef(new Animated.Value(5)).current;
+  const routeCount = Math.max(state.routes.length, 1);
+  const barWidth = Math.min(width - 24, 480);
+  const itemWidth = barWidth / routeCount;
+  const indicatorWidth = Math.max(itemWidth - 10, 0);
+
+  useEffect(() => {
+    Animated.spring(indicatorTranslateX, {
+      toValue: state.index * itemWidth + 5,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 110,
+    }).start();
+  }, [indicatorTranslateX, itemWidth, state.index]);
+
+  return (
+    <View style={[styles.tabBarShell, { paddingBottom: tabBarBottomPadding, backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.tabBarFrame,
+          {
+            width: barWidth,
+            backgroundColor: isDarkMode ? "#0f172a" : colors.card,
+            borderColor: isDarkMode ? colors.borderSoft : "rgba(15, 23, 42, 0.06)",
+          },
+        ]}
+      >
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.activeTabBackdrop,
+            {
+              width: indicatorWidth,
+              transform: [{ translateX: indicatorTranslateX }],
+              backgroundColor: isDarkMode ? "rgba(52, 211, 153, 0.14)" : colors.overlay,
+              borderColor: isDarkMode ? "rgba(52, 211, 153, 0.22)" : "rgba(15, 118, 110, 0.08)",
+            },
+          ]}
+        />
+
+        {state.routes.map((route, index) => {
+          const focused = state.index === index;
+          const descriptor = descriptors[route.key];
+          const label = getTabLabel(route, descriptor);
+
+          const onPress = () => {
+            const event = navigation.emit({
+              type: "tabPress",
+              target: route.key,
+              canPreventDefault: true,
+            });
+
+            if (!focused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
+          };
+
+          const onLongPress = () => {
+            navigation.emit({
+              type: "tabLongPress",
+              target: route.key,
+            });
+          };
+
+          return (
+            <AnimatedTabItem
+              key={route.key}
+              label={label}
+              iconName={iconMap[route.name]}
+              focused={focused}
+              colors={colors}
+              isDarkMode={isDarkMode}
+              onPress={onPress}
+              onLongPress={onLongPress}
+              accessibilityState={focused ? { selected: true } : {}}
+              accessibilityLabel={descriptor.options.tabBarAccessibilityLabel}
+              testID={descriptor.options.tabBarButtonTestID}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function RootTabs({ onSignOut, user }) {
   const insets = useSafeAreaInsets();
   const { colors, isDarkMode } = usePreferences();
   const isDriver = user?.role === "driver";
-  const tabBarBottomPadding = Math.max(insets.bottom, 8);
-  const tabBarHeight = 56 + tabBarBottomPadding;
+  const tabBarBottomPadding = Math.max(insets.bottom, 10);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
 
   return (
     <>
       <Tab.Navigator
+        tabBar={(props) => (
+          <AnimatedTabBar
+            {...props}
+            colors={colors}
+            isDarkMode={isDarkMode}
+            tabBarBottomPadding={tabBarBottomPadding}
+          />
+        )}
         screenOptions={({ route }) => ({
           sceneStyle: {
             backgroundColor: colors.background,
@@ -55,19 +245,8 @@ export default function RootTabs({ onSignOut, user }) {
             </Pressable>
           ),
           headerShadowVisible: !isDarkMode,
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textMuted,
           tabBarHideOnKeyboard: true,
-          tabBarStyle: [
-            styles.tabBar,
-            {
-              backgroundColor: colors.card,
-              borderTopColor: colors.borderSoft,
-              height: tabBarHeight,
-              paddingBottom: tabBarBottomPadding,
-            },
-          ],
-          tabBarIcon: ({ color, size }) => <Ionicons name={iconMap[route.name]} size={size} color={color} />,
+          tabBarShowLabel: false,
         })}
       >
         {isDriver ? (
@@ -134,8 +313,55 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  tabBar: {
+  tabBarShell: {
+    paddingTop: 10,
+    paddingHorizontal: 12,
+  },
+  tabBarFrame: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 28,
+    paddingHorizontal: 6,
     paddingTop: 8,
+    paddingBottom: 10,
+    borderWidth: 1,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    elevation: 12,
+  },
+  activeTabBackdrop: {
+    position: "absolute",
+    top: 6,
+    bottom: 8,
+    left: 0,
+    borderRadius: 22,
+    borderWidth: 1,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 62,
+    zIndex: 1,
+  },
+  tabIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  tabLabel: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   settingsModal: {
     flex: 1,
