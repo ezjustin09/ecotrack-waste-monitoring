@@ -2633,6 +2633,13 @@ async function closeDatabaseConnection() {
 }
 
 app.get("/", (req, res) => {
+  const acceptsHtml = req.accepts(["html", "json"]) === "html";
+
+  if (acceptsHtml) {
+    res.redirect("/admin");
+    return;
+  }
+
   res.json({
     message: "Waste monitoring backend is running.",
     endpoints: [
