@@ -48,6 +48,10 @@ function AnimatedTabItem({
   testID,
 }) {
   const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const activeBubbleScale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.9, 1],
+  });
 
   useEffect(() => {
     Animated.spring(progress, {
@@ -60,19 +64,27 @@ function AnimatedTabItem({
 
   const iconTranslateY = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -5],
+    outputRange: [0, -10],
   });
   const iconScale = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.08],
+    outputRange: [1, 1.14],
   });
   const labelOpacity = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.82, 1],
+    outputRange: [0, 1],
   });
   const labelTranslateY = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [2, 0],
+    outputRange: [8, 0],
+  });
+  const inactiveIconOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  const activeIconOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
   });
 
   return (
@@ -87,19 +99,28 @@ function AnimatedTabItem({
     >
       <Animated.View
         style={[
-          styles.tabIconBubble,
+          styles.activeIconBubble,
           {
-            backgroundColor: focused ? colors.primary : isDarkMode ? colors.cardMuted : "#f8fafc",
-            borderColor: focused
-              ? colors.primary
-              : isDarkMode
-                ? "rgba(255,255,255,0.04)"
-                : "rgba(15,23,42,0.04)",
+            backgroundColor: colors.primary,
+            borderColor: isDarkMode ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)",
+            opacity: activeIconOpacity,
+            transform: [{ translateY: iconTranslateY }, { scale: Animated.multiply(iconScale, activeBubbleScale) }],
+          },
+        ]}
+      >
+        <Ionicons name={iconName} size={20} color="#ffffff" />
+      </Animated.View>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.inactiveIconShell,
+          {
+            opacity: inactiveIconOpacity,
             transform: [{ translateY: iconTranslateY }, { scale: iconScale }],
           },
         ]}
       >
-        <Ionicons name={iconName} size={20} color={focused ? "#ffffff" : colors.textMuted} />
+        <Ionicons name={iconName} size={21} color={colors.textMuted} />
       </Animated.View>
       <Animated.Text
         style={[
@@ -124,15 +145,29 @@ function AnimatedTabBar({ state, descriptors, navigation, colors, isDarkMode, ta
   const barWidth = Math.min(width - 24, 480);
   const itemWidth = barWidth / routeCount;
   const indicatorWidth = Math.max(itemWidth - 10, 0);
+  const indicatorScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.spring(indicatorTranslateX, {
-      toValue: state.index * itemWidth + 5,
-      useNativeDriver: true,
-      friction: 9,
-      tension: 110,
-    }).start();
-  }, [indicatorTranslateX, itemWidth, state.index]);
+    Animated.sequence([
+      Animated.timing(indicatorScale, {
+        toValue: 0.92,
+        duration: 90,
+        useNativeDriver: true,
+      }),
+      Animated.spring(indicatorTranslateX, {
+        toValue: state.index * itemWidth + 5,
+        useNativeDriver: true,
+        friction: 9,
+        tension: 110,
+      }),
+      Animated.spring(indicatorScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 7,
+        tension: 120,
+      }),
+    ]).start();
+  }, [indicatorScale, indicatorTranslateX, itemWidth, state.index]);
 
   return (
     <View style={[styles.tabBarShell, { paddingBottom: tabBarBottomPadding, backgroundColor: colors.background }]}>
@@ -152,7 +187,7 @@ function AnimatedTabBar({ state, descriptors, navigation, colors, isDarkMode, ta
             styles.activeTabBackdrop,
             {
               width: indicatorWidth,
-              transform: [{ translateX: indicatorTranslateX }],
+              transform: [{ translateX: indicatorTranslateX }, { scale: indicatorScale }],
               backgroundColor: isDarkMode ? "rgba(52, 211, 153, 0.14)" : colors.overlay,
               borderColor: isDarkMode ? "rgba(52, 211, 153, 0.22)" : "rgba(15, 118, 110, 0.08)",
             },
@@ -323,45 +358,61 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 28,
     paddingHorizontal: 6,
-    paddingTop: 8,
-    paddingBottom: 10,
+    paddingTop: 10,
+    paddingBottom: 12,
     borderWidth: 1,
     shadowColor: "#0f172a",
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
     shadowOffset: {
       width: 0,
-      height: 8,
+      height: 10,
     },
     elevation: 12,
   },
   activeTabBackdrop: {
     position: "absolute",
-    top: 6,
-    bottom: 8,
+    top: 8,
+    bottom: 10,
     left: 0,
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1,
   },
   tabItem: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 62,
+    minHeight: 68,
     zIndex: 1,
   },
-  tabIconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  activeIconBubble: {
+    position: "absolute",
+    top: 6,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    marginBottom: 6,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    elevation: 8,
+  },
+  inactiveIconShell: {
+    position: "absolute",
+    top: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tabLabel: {
     fontSize: 12,
     fontWeight: "700",
+    marginTop: 34,
   },
   settingsModal: {
     flex: 1,
