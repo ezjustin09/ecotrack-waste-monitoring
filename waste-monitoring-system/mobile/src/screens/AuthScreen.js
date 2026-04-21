@@ -491,7 +491,7 @@ export default function AuthScreen({ onAuthenticated }) {
           },
         ]}
       >
-        <Text style={styles.kicker}>EcoTrack: Waste Monitoring System for Pateros</Text>
+        <Text style={styles.kicker}>EcoTrack: Waste Collection Monitoring for Pateros</Text>
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 

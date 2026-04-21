@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const baseConfig = {
-  name: "EcoTrack: Waste Monitoring System for Pateros",
+  name: "EcoTrack: Waste Collection Monitoring for Pateros",
   slug: "waste-monitoring-system",
   scheme: [
     "wastemonitoring",
@@ -52,16 +52,16 @@ const baseConfig = {
       "expo-location",
       {
         locationWhenInUsePermission:
-          "Allow EcoTrack: Waste Monitoring System for Pateros to access your location for reporting illegal dumping.",
+          "Allow EcoTrack: Waste Collection Monitoring for Pateros to access your location for reporting illegal dumping.",
       },
     ],
     [
       "expo-image-picker",
       {
         photosPermission:
-          "Allow EcoTrack: Waste Monitoring System for Pateros to access your photos so you can attach issue evidence.",
+          "Allow EcoTrack: Waste Collection Monitoring for Pateros to access your photos so you can attach issue evidence.",
         cameraPermission:
-          "Allow EcoTrack: Waste Monitoring System for Pateros to access your camera so you can capture issue evidence.",
+          "Allow EcoTrack: Waste Collection Monitoring for Pateros to access your camera so you can capture issue evidence.",
       },
     ],
     [
