@@ -22,6 +22,8 @@ const DAY_ORDER = {
   Sunday: 7,
 };
 
+const DAY_LABELS = Object.keys(DAY_ORDER);
+
 function sortSchedule(entries) {
   return [...entries].sort((first, second) => {
     const firstDay = DAY_ORDER[first.day] || 99;
@@ -33,6 +35,51 @@ function sortSchedule(entries) {
 
     return String(first.zone || "").localeCompare(String(second.zone || ""));
   });
+}
+
+function getTodayName() {
+  const jsDay = new Date().getDay();
+  return DAY_LABELS[(jsDay + 6) % 7] || "Monday";
+}
+
+function groupScheduleByDay(entries) {
+  return entries.reduce((groups, entry) => {
+    const key = entry.day || "Unscheduled";
+
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+
+    groups[key].push(entry);
+    return groups;
+  }, {});
+}
+
+function getNextSchedule(entries) {
+  if (!entries.length) {
+    return null;
+  }
+
+  const todayOrder = DAY_ORDER[getTodayName()] || 1;
+  const scoredEntries = entries.map((entry) => {
+    const entryOrder = DAY_ORDER[entry.day] || 99;
+    const distance = entryOrder >= todayOrder ? entryOrder - todayOrder : 7 - (todayOrder - entryOrder);
+
+    return {
+      ...entry,
+      _distance: distance,
+    };
+  });
+
+  scoredEntries.sort((first, second) => {
+    if (first._distance !== second._distance) {
+      return first._distance - second._distance;
+    }
+
+    return String(first.timeWindow || "").localeCompare(String(second.timeWindow || ""));
+  });
+
+  return scoredEntries[0] || null;
 }
 
 function getWasteTypeTone(wasteType) {
@@ -53,8 +100,34 @@ function getWasteTypeTone(wasteType) {
   }
 
   return {
-    backgroundColor: "#ffedd5",
-    color: "#c2410c",
+    backgroundColor: "#fef3c7",
+    color: "#b45309",
+  };
+}
+
+function getDayTone(day) {
+  const normalizedDay = String(day || "").trim();
+
+  if (normalizedDay === getTodayName()) {
+    return {
+      accent: "#0f766e",
+      soft: "#ccfbf1",
+      ring: "rgba(15,118,110,0.14)",
+    };
+  }
+
+  if (normalizedDay === "Saturday" || normalizedDay === "Sunday") {
+    return {
+      accent: "#7c3aed",
+      soft: "#ede9fe",
+      ring: "rgba(124,58,237,0.12)",
+    };
+  }
+
+  return {
+    accent: "#2563eb",
+    soft: "#dbeafe",
+    ring: "rgba(37,99,235,0.12)",
   };
 }
 
@@ -67,6 +140,16 @@ export default function ScheduleScreen() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const sortedSchedule = useMemo(() => sortSchedule(schedule), [schedule]);
+  const groupedSchedule = useMemo(() => groupScheduleByDay(sortedSchedule), [sortedSchedule]);
+  const nextSchedule = useMemo(() => getNextSchedule(sortedSchedule), [sortedSchedule]);
+  const uniqueCoverageCount = useMemo(
+    () =>
+      new Set(
+        sortedSchedule.map((entry) => String(entry.zone || entry.barangay || "").trim()).filter(Boolean)
+      ).size,
+    [sortedSchedule]
+  );
+  const todayName = useMemo(() => getTodayName(), []);
 
   function handleAuthError(message) {
     if (message === "Authentication required" || message === "Invalid or expired session") {
@@ -108,15 +191,99 @@ export default function ScheduleScreen() {
       }
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.heroCard, { backgroundColor: colors.card }]}>
+      <View
+        style={[
+          styles.heroCard,
+          {
+            backgroundColor: isDarkMode ? "#102032" : "#eff8f4",
+            borderColor: isDarkMode ? colors.borderSoft : "#cfe7dc",
+          },
+        ]}
+      >
+        <View style={styles.heroBackdropPrimary} />
+        <View style={styles.heroBackdropSecondary} />
         <Text style={[styles.kicker, { color: colors.primary }]}>Collection Schedule</Text>
-        <Text style={[styles.title, { color: colors.text }]}>Weekly Waste Pickup Plan</Text>
+        <Text style={[styles.title, { color: isDarkMode ? "#f8fafc" : "#0f172a" }]}>Know your next pickup at a glance</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Check your collection day and prepare your waste before pickup starts in your zone.
+          Stay ready for collection day, avoid missed pickups, and check the latest route timing for your area.
         </Text>
-        <View style={styles.heroMetaRow}>
-          <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-          <Text style={[styles.heroMetaText, { color: colors.primary }]}>{sortedSchedule.length} active schedule slots</Text>
+
+        <View
+          style={[
+            styles.nextPickupCard,
+            {
+              backgroundColor: isDarkMode ? "rgba(15,23,42,0.56)" : "#ffffff",
+              borderColor: isDarkMode ? colors.borderSoft : "#d9e8e1",
+            },
+          ]}
+        >
+          <View style={styles.nextPickupHeader}>
+            <View>
+              <Text style={[styles.nextPickupLabel, { color: colors.primary }]}>Next Pickup</Text>
+              <Text style={[styles.nextPickupDay, { color: colors.text }]}>
+                {nextSchedule ? nextSchedule.day : "No schedule yet"}
+              </Text>
+            </View>
+            <View style={[styles.todayBadge, { backgroundColor: colors.overlay }]}>
+              <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
+              <Text style={[styles.todayBadgeText, { color: colors.primary }]}>Today: {todayName}</Text>
+            </View>
+          </View>
+
+          <Text style={[styles.nextPickupZone, { color: colors.textSecondary }]}>
+            {nextSchedule ? nextSchedule.zone || nextSchedule.barangay || "Collection route" : "Schedule will appear once available."}
+          </Text>
+
+          <View style={styles.nextPickupMetaRow}>
+            <View style={[styles.metaChip, { backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc" }]}>
+              <Ionicons name="time-outline" size={14} color={colors.primary} />
+              <Text style={[styles.metaChipText, { color: colors.text }]}>
+                {nextSchedule ? nextSchedule.timeWindow : "Waiting for update"}
+              </Text>
+            </View>
+            {nextSchedule ? (
+              <View
+                style={[
+                  styles.metaChip,
+                  {
+                    backgroundColor: getWasteTypeTone(nextSchedule.wasteType).backgroundColor,
+                  },
+                ]}
+              >
+                <Ionicons name="leaf-outline" size={14} color={getWasteTypeTone(nextSchedule.wasteType).color} />
+                <Text style={[styles.metaChipText, { color: getWasteTypeTone(nextSchedule.wasteType).color }]}>
+                  {nextSchedule.wasteType}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: isDarkMode ? "rgba(15,23,42,0.56)" : "#ffffff",
+                borderColor: isDarkMode ? colors.borderSoft : "#d9e8e1",
+              },
+            ]}
+          >
+            <Text style={[styles.statValue, { color: colors.text }]}>{sortedSchedule.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active slots</Text>
+          </View>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: isDarkMode ? "rgba(15,23,42,0.56)" : "#ffffff",
+                borderColor: isDarkMode ? colors.borderSoft : "#d9e8e1",
+              },
+            ]}
+          >
+            <Text style={[styles.statValue, { color: colors.text }]}>{uniqueCoverageCount}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Covered areas</Text>
+          </View>
         </View>
       </View>
 
@@ -139,33 +306,86 @@ export default function ScheduleScreen() {
       ) : null}
 
       {!loading && sortedSchedule.length > 0
-        ? sortedSchedule.map((entry) => {
-            const tone = getWasteTypeTone(entry.wasteType);
+        ? Object.entries(groupedSchedule).map(([day, entries]) => {
+            const dayTone = getDayTone(day);
 
             return (
-              <View
-                key={entry.id || `${entry.day}-${entry.zone}`}
-                style={[styles.scheduleCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}
-              >
-                <View style={styles.cardHeaderRow}>
-                  <View>
-                    <Text style={[styles.dayText, { color: colors.text }]}>{entry.day}</Text>
-                    <Text style={[styles.zoneText, { color: colors.textSecondary }]}>{entry.zone}</Text>
-                  </View>
-                  <View style={[styles.typePill, { backgroundColor: tone.backgroundColor }]}>
-                    <Text style={[styles.typePillText, { color: tone.color }]}>{entry.wasteType}</Text>
-                  </View>
+              <View key={day} style={styles.daySection}>
+                <View style={styles.daySectionHeader}>
+                  <View style={[styles.dayDot, { backgroundColor: dayTone.accent }]} />
+                  <Text style={[styles.daySectionTitle, { color: colors.text }]}>{day}</Text>
+                  {day === todayName ? (
+                    <View style={[styles.liveTag, { backgroundColor: dayTone.soft }]}>
+                      <Text style={[styles.liveTagText, { color: dayTone.accent }]}>Today</Text>
+                    </View>
+                  ) : null}
                 </View>
 
-                <View style={styles.detailRow}>
-                  <Ionicons name="time-outline" size={15} color={colors.primary} />
-                  <Text style={[styles.detailText, { color: colors.text }]}>{entry.timeWindow}</Text>
-                </View>
+                {entries.map((entry) => {
+                  const tone = getWasteTypeTone(entry.wasteType);
 
-                <View style={styles.detailRow}>
-                  <Ionicons name="information-circle-outline" size={15} color={colors.textMuted} />
-                  <Text style={[styles.noteText, { color: isDarkMode ? colors.textSecondary : "#475569" }]}>{entry.notes}</Text>
-                </View>
+                  return (
+                    <View
+                      key={entry.id || `${entry.day}-${entry.zone}-${entry.timeWindow}`}
+                      style={[
+                        styles.scheduleCard,
+                        {
+                          backgroundColor: colors.card,
+                          borderColor: colors.borderSoft,
+                          shadowColor: dayTone.accent,
+                        },
+                      ]}
+                    >
+                      <View style={styles.scheduleAccentWrap}>
+                        <View
+                          style={[
+                            styles.scheduleAccent,
+                            {
+                              backgroundColor: dayTone.accent,
+                              shadowColor: dayTone.accent,
+                            },
+                          ]}
+                        />
+                      </View>
+
+                      <View style={styles.scheduleCardBody}>
+                        <View style={styles.cardHeaderRow}>
+                          <View style={styles.cardHeaderTextWrap}>
+                            <Text style={[styles.zoneTextStrong, { color: colors.text }]}>
+                              {entry.zone || entry.barangay || "Collection route"}
+                            </Text>
+                            <Text style={[styles.cardMiniText, { color: colors.textMuted }]}>Prepare waste before the collection window starts</Text>
+                          </View>
+                          <View style={[styles.typePill, { backgroundColor: tone.backgroundColor }]}>
+                            <Text style={[styles.typePillText, { color: tone.color }]}>{entry.wasteType}</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.metaStrip}>
+                          <View
+                            style={[
+                              styles.inlineChip,
+                              { backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc", borderColor: colors.borderSoft },
+                            ]}
+                          >
+                            <Ionicons name="time-outline" size={15} color={colors.primary} />
+                            <Text style={[styles.inlineChipText, { color: colors.text }]}>{entry.timeWindow}</Text>
+                          </View>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.noteCard,
+                            { backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc", borderColor: colors.borderSoft },
+                          ]}
+                        >
+                          <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
+                          <Text style={[styles.noteText, { color: isDarkMode ? colors.textSecondary : "#475569" }]}>{entry.notes}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             );
           })
@@ -185,6 +405,8 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 18,
     backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d9e8e1",
     marginBottom: 14,
     shadowColor: "#0f172a",
     shadowOpacity: 0.08,
@@ -194,6 +416,25 @@ const styles = StyleSheet.create({
       height: 6,
     },
     elevation: 4,
+    overflow: "hidden",
+  },
+  heroBackdropPrimary: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    top: -78,
+    right: -48,
+    backgroundColor: "rgba(52, 211, 153, 0.12)",
+  },
+  heroBackdropSecondary: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    bottom: -32,
+    left: -20,
+    backgroundColor: "rgba(37, 99, 235, 0.08)",
   },
   kicker: {
     fontSize: 12,
@@ -224,6 +465,85 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#0f766e",
+  },
+  nextPickupCard: {
+    marginTop: 16,
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1,
+  },
+  nextPickupHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  nextPickupLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  nextPickupDay: {
+    marginTop: 4,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  nextPickupZone: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  nextPickupMetaRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  todayBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  todayBadgeText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  metaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  metaChipText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  statsRow: {
+    marginTop: 14,
+    flexDirection: "row",
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    marginRight: 10,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  statLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "700",
   },
   loadingCard: {
     paddingVertical: 16,
@@ -258,6 +578,34 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontSize: 14,
   },
+  daySection: {
+    marginBottom: 16,
+  },
+  daySectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  dayDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  daySectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  liveTag: {
+    marginLeft: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  liveTagText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
   scheduleCard: {
     borderRadius: 18,
     padding: 14,
@@ -265,11 +613,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     marginBottom: 10,
+    flexDirection: "row",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    elevation: 3,
+  },
+  scheduleAccentWrap: {
+    width: 22,
+    alignItems: "center",
+    paddingTop: 2,
+  },
+  scheduleAccent: {
+    width: 8,
+    flex: 1,
+    minHeight: 92,
+    borderRadius: 999,
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+  },
+  scheduleCardBody: {
+    flex: 1,
+    marginLeft: 10,
   },
   cardHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+  },
+  cardHeaderTextWrap: {
+    flex: 1,
+    paddingRight: 12,
   },
   dayText: {
     fontSize: 18,
@@ -281,6 +662,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#475569",
   },
+  zoneTextStrong: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  cardMiniText: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   typePill: {
     borderRadius: 999,
     paddingHorizontal: 11,
@@ -289,6 +679,24 @@ const styles = StyleSheet.create({
   typePillText: {
     fontSize: 12,
     fontWeight: "800",
+  },
+  metaStrip: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  inlineChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  inlineChipText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: "700",
   },
   detailRow: {
     marginTop: 10,
@@ -306,5 +714,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#64748b",
     flex: 1,
+    lineHeight: 18,
+  },
+  noteCard: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
   },
 });
