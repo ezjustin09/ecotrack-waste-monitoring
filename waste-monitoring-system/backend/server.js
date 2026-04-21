@@ -128,12 +128,38 @@ if (IS_PRODUCTION && ALLOWED_CORS_ORIGINS.size === 0) {
   throw new Error("CORS_ALLOWED_ORIGINS must be set in production.");
 }
 
-function isCorsOriginAllowed(origin) {
+function getRequestHost(req) {
+  return String(req?.headers?.["x-forwarded-host"] || req?.headers?.host || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+}
+
+function getOriginHost(origin) {
+  try {
+    return new URL(origin).host.toLowerCase();
+  } catch (error) {
+    return "";
+  }
+}
+
+function isSameHostOrigin(origin, req) {
+  if (!origin || !req) {
+    return false;
+  }
+
+  const requestHost = getRequestHost(req);
+  const originHost = getOriginHost(origin);
+
+  return Boolean(requestHost && originHost && requestHost === originHost);
+}
+
+function isCorsOriginAllowed(origin, req) {
   if (!origin) {
     return true;
   }
 
-  return ALLOWED_CORS_ORIGINS.has(origin);
+  return ALLOWED_CORS_ORIGINS.has(origin) || isSameHostOrigin(origin, req);
 }
 
 function corsOriginHandler(origin, callback) {
@@ -161,8 +187,32 @@ const io = new Server(server, {
   },
 });
 
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+app.use((req, res, next) =>
+  cors({
+    ...corsOptions,
+    origin(origin, callback) {
+      if (isCorsOriginAllowed(origin, req)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+  })(req, res, next)
+);
+app.options("*", (req, res, next) =>
+  cors({
+    ...corsOptions,
+    origin(origin, callback) {
+      if (isCorsOriginAllowed(origin, req)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+  })(req, res, next)
+);
 app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
 app.use((error, req, res, next) => {
