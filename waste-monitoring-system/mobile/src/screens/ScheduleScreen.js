@@ -202,11 +202,7 @@ export default function ScheduleScreen() {
       >
         <View style={styles.heroBackdropPrimary} />
         <View style={styles.heroBackdropSecondary} />
-        <Text style={[styles.kicker, { color: colors.primary }]}>Collection Schedule</Text>
-        <Text style={[styles.title, { color: isDarkMode ? "#f8fafc" : "#0f172a" }]}>Know your next pickup at a glance</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Stay ready for collection day, avoid missed pickups, and check the latest route timing for your area.
-        </Text>
+        <Text style={[styles.title, { color: isDarkMode ? "#f8fafc" : "#0f172a" }]}>Next pickup</Text>
 
         <View
           style={[
@@ -219,19 +215,18 @@ export default function ScheduleScreen() {
         >
           <View style={styles.nextPickupHeader}>
             <View>
-              <Text style={[styles.nextPickupLabel, { color: colors.primary }]}>Next Pickup</Text>
               <Text style={[styles.nextPickupDay, { color: colors.text }]}>
                 {nextSchedule ? nextSchedule.day : "No schedule yet"}
               </Text>
             </View>
             <View style={[styles.todayBadge, { backgroundColor: colors.overlay }]}>
               <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
-              <Text style={[styles.todayBadgeText, { color: colors.primary }]}>Today: {todayName}</Text>
+              <Text style={[styles.todayBadgeText, { color: colors.primary }]}>Today</Text>
             </View>
           </View>
 
           <Text style={[styles.nextPickupZone, { color: colors.textSecondary }]}>
-            {nextSchedule ? nextSchedule.zone || nextSchedule.barangay || "Collection route" : "Schedule will appear once available."}
+            {nextSchedule ? nextSchedule.zone || nextSchedule.barangay || "Collection route" : "No route yet"}
           </Text>
 
           <View style={styles.nextPickupMetaRow}>
@@ -269,8 +264,8 @@ export default function ScheduleScreen() {
               },
             ]}
           >
-            <Text style={[styles.statValue, { color: colors.text }]}>{sortedSchedule.length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active slots</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{sortedSchedule.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Slots</Text>
           </View>
           <View
             style={[
@@ -281,8 +276,8 @@ export default function ScheduleScreen() {
               },
             ]}
           >
-            <Text style={[styles.statValue, { color: colors.text }]}>{uniqueCoverageCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Covered areas</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{uniqueCoverageCount}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Areas</Text>
           </View>
         </View>
       </View>
@@ -290,7 +285,7 @@ export default function ScheduleScreen() {
       {loading ? (
         <View style={styles.loadingCard}>
           <ActivityIndicator size="small" color="#0f766e" />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading collection schedule...</Text>
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading schedule...</Text>
         </View>
       ) : null}
 
@@ -301,7 +296,7 @@ export default function ScheduleScreen() {
       {!loading && !errorMessage && sortedSchedule.length === 0 ? (
         <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
           <Ionicons name="calendar-clear-outline" size={22} color={colors.textMuted} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No schedule found yet.</Text>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No schedule yet.</Text>
         </View>
       ) : null}
 
@@ -354,7 +349,6 @@ export default function ScheduleScreen() {
                             <Text style={[styles.zoneTextStrong, { color: colors.text }]}>
                               {entry.zone || entry.barangay || "Collection route"}
                             </Text>
-                            <Text style={[styles.cardMiniText, { color: colors.textMuted }]}>Prepare waste before the collection window starts</Text>
                           </View>
                           <View style={[styles.typePill, { backgroundColor: tone.backgroundColor }]}>
                             <Text style={[styles.typePillText, { color: tone.color }]}>{entry.wasteType}</Text>
@@ -373,15 +367,19 @@ export default function ScheduleScreen() {
                           </View>
                         </View>
 
-                        <View
-                          style={[
-                            styles.noteCard,
-                            { backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc", borderColor: colors.borderSoft },
-                          ]}
-                        >
-                          <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
-                          <Text style={[styles.noteText, { color: isDarkMode ? colors.textSecondary : "#475569" }]}>{entry.notes}</Text>
-                        </View>
+                        {String(entry.notes || "").trim() ? (
+                          <View
+                            style={[
+                              styles.noteCard,
+                              { backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc", borderColor: colors.borderSoft },
+                            ]}
+                          >
+                            <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
+                            <Text style={[styles.noteText, { color: isDarkMode ? colors.textSecondary : "#475569" }]}>
+                              {entry.notes}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   );
@@ -436,35 +434,10 @@ const styles = StyleSheet.create({
     left: -20,
     backgroundColor: "rgba(37, 99, 235, 0.08)",
   },
-  kicker: {
-    fontSize: 12,
-    letterSpacing: 1,
-    fontWeight: "800",
-    color: "#0f766e",
-    textTransform: "uppercase",
-  },
   title: {
-    marginTop: 6,
-    fontSize: 26,
+    fontSize: 30,
     fontWeight: "800",
     color: "#0f172a",
-  },
-  subtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#475569",
-  },
-  heroMetaRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  heroMetaText: {
-    marginLeft: 8,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#0f766e",
   },
   nextPickupCard: {
     marginTop: 16,
@@ -477,14 +450,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  nextPickupLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
   nextPickupDay: {
-    marginTop: 4,
     fontSize: 22,
     fontWeight: "800",
   },
@@ -652,24 +618,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
   },
-  dayText: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  zoneText: {
-    marginTop: 2,
-    fontSize: 13,
-    color: "#475569",
-  },
   zoneTextStrong: {
     fontSize: 16,
     fontWeight: "800",
-  },
-  cardMiniText: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "600",
   },
   typePill: {
     borderRadius: 999,
@@ -697,17 +648,6 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 12,
     fontWeight: "700",
-  },
-  detailRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  detailText: {
-    marginLeft: 8,
-    fontSize: 13,
-    color: "#0f172a",
-    fontWeight: "600",
   },
   noteText: {
     marginLeft: 8,

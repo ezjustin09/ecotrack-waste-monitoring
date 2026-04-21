@@ -140,34 +140,21 @@ function AnimatedTabItem({
 
 function AnimatedTabBar({ state, descriptors, navigation, colors, isDarkMode, tabBarBottomPadding }) {
   const { width } = useWindowDimensions();
-  const indicatorTranslateX = useRef(new Animated.Value(5)).current;
   const routeCount = Math.max(state.routes.length, 1);
   const barWidth = Math.min(width - 24, 480);
   const itemWidth = barWidth / routeCount;
-  const indicatorWidth = Math.max(itemWidth - 10, 0);
-  const indicatorScale = useRef(new Animated.Value(1)).current;
+  const indicatorInset = 10;
+  const indicatorWidth = Math.max(itemWidth - indicatorInset * 2, 0);
+  const indicatorTranslateX = useRef(new Animated.Value(state.index * itemWidth + indicatorInset)).current;
 
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(indicatorScale, {
-        toValue: 0.92,
-        duration: 90,
-        useNativeDriver: true,
-      }),
-      Animated.spring(indicatorTranslateX, {
-        toValue: state.index * itemWidth + 5,
-        useNativeDriver: true,
-        friction: 9,
-        tension: 110,
-      }),
-      Animated.spring(indicatorScale, {
-        toValue: 1,
-        useNativeDriver: true,
-        friction: 7,
-        tension: 120,
-      }),
-    ]).start();
-  }, [indicatorScale, indicatorTranslateX, itemWidth, state.index]);
+    Animated.spring(indicatorTranslateX, {
+      toValue: state.index * itemWidth + indicatorInset,
+      useNativeDriver: true,
+      friction: 10,
+      tension: 140,
+    }).start();
+  }, [indicatorInset, indicatorTranslateX, itemWidth, state.index]);
 
   return (
     <View style={[styles.tabBarShell, { paddingBottom: tabBarBottomPadding, backgroundColor: colors.background }]}>
@@ -187,7 +174,7 @@ function AnimatedTabBar({ state, descriptors, navigation, colors, isDarkMode, ta
             styles.activeTabBackdrop,
             {
               width: indicatorWidth,
-              transform: [{ translateX: indicatorTranslateX }, { scale: indicatorScale }],
+              transform: [{ translateX: indicatorTranslateX }],
               backgroundColor: isDarkMode ? "rgba(52, 211, 153, 0.14)" : colors.overlay,
               borderColor: isDarkMode ? "rgba(52, 211, 153, 0.22)" : "rgba(15, 118, 110, 0.08)",
             },
@@ -375,7 +362,7 @@ const styles = StyleSheet.create({
     top: 8,
     bottom: 10,
     left: 0,
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
   },
   tabItem: {
