@@ -73,7 +73,7 @@ const baseConfig = {
   ],
   extra: {
     eas: {
-      projectId: "fc73b21b-24ed-41f4-b57c-2164ba106509",
+      projectId: "729cd156-38c3-451c-9439-add184af5ac4",
     },
   },
 };
