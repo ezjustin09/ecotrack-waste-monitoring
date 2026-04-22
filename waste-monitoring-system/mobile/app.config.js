@@ -3,7 +3,7 @@ const path = require("path");
 
 const baseConfig = {
   name: "EcoTrack: Waste Collection Monitoring for Pateros",
-  slug: "waste-monitoring-system",
+  slug: "ecotrack-waste-collection-monitoring",
   scheme: [
     "wastemonitoring",
     "com.googleusercontent.apps.457539763720-hqdpqbb4nigrn3mo7nib75h9akfb13hi",
