@@ -69,19 +69,6 @@ body.admin-nav-open {
   gap: 10px;
 }
 
-.logo-mark {
-  display: inline-block;
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
-  background: url("/admin/assets/splash-logo.png") center / contain no-repeat;
-  color: transparent;
-  font-size: 0;
-  line-height: 0;
-  overflow: hidden;
-  vertical-align: middle;
-}
-
 .brand-word {
   display: inline-flex;
   align-items: baseline;
@@ -232,18 +219,6 @@ body.admin-nav-open {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-}
-
-.auth-brand .logo-mark {
-  width: 56px;
-  height: 56px;
-  flex-basis: 56px;
-}
-
-.brand-block .logo-mark {
-  width: 54px;
-  height: 54px;
-  flex-basis: 54px;
 }
 
 .menu {
@@ -456,10 +431,6 @@ body.admin-nav-open {
   border-left-color: #22c55e;
 }
 
-.status-panel {
-  margin-top: 8px;
-}
-
 .content-grid {
   padding: 8px 18px 20px;
   display: grid;
@@ -535,35 +506,6 @@ body.admin-nav-open {
 
 .analytics-chart-shell-wide canvas {
   height: 300px !important;
-}
-
-.bar-list {
-  display: grid;
-  gap: 9px;
-}
-
-.bar-item {
-  display: grid;
-  gap: 6px;
-}
-
-.bar-label-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: var(--slate-700);
-}
-
-.bar-track {
-  height: 9px;
-  border-radius: 999px;
-  background: #ecf1ef;
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #22c55e, #16a34a);
 }
 
 .analytics-performance-grid {

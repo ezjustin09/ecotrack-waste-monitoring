@@ -316,48 +316,6 @@ function renderStats(payload) {
   }
 }
 
-function renderStatusBreakdown(statusMap = {}) {
-  const chipsNode = document.getElementById("statusChips");
-  const barsNode = document.getElementById("statusBars");
-
-  if (!chipsNode && !barsNode) {
-    return;
-  }
-
-  const entries = Object.entries(statusMap);
-  if (!entries.length) {
-    if (chipsNode) {
-      chipsNode.innerHTML = '<span class="empty">No active trucks yet.</span>';
-    }
-    if (barsNode) {
-      barsNode.innerHTML = '<p class="empty">No status data available.</p>';
-    }
-    return;
-  }
-
-  const total = entries.reduce((sum, [, count]) => sum + Number(count || 0), 0);
-
-  if (chipsNode) {
-    chipsNode.innerHTML = entries
-      .map(([status, count]) => `<span class="status-chip">${status}: ${count}</span>`)
-      .join("");
-  }
-
-  if (barsNode) {
-    barsNode.innerHTML = entries
-      .map(([status, count]) => {
-        const percent = total > 0 ? Math.round((Number(count || 0) / total) * 100) : 0;
-        return `
-          <article class="bar-item">
-            <div class="bar-label-row"><span>${status}</span><strong>${count} (${percent}%)</strong></div>
-            <div class="bar-track"><div class="bar-fill" style="width: ${percent}%"></div></div>
-          </article>
-        `;
-      })
-      .join("");
-  }
-}
-
 function getFilteredTrucks(trucks = []) {
   return filterBySearch(trucks, [
     (truck) => truck.truckId,
@@ -2160,7 +2118,6 @@ function applyPayload(payload) {
   state.tripTickets = Array.isArray(state.payload?.tripTickets) ? state.payload.tripTickets : state.tripTickets;
 
   renderStats(state.payload);
-  renderStatusBreakdown(state.payload?.stats?.byStatus || {});
   renderLiveMap(state.payload?.trucks || []);
   renderTrucks(state.payload?.trucks || []);
   renderReports(state.payload?.reports || []);
@@ -2207,10 +2164,7 @@ async function fetchDashboard() {
     await renderBackendInfo();
     await renderPushDiagnostics();
   } catch (error) {
-    const chipsNode = document.getElementById("statusChips");
-    if (chipsNode && !state.payload) {
-      chipsNode.innerHTML = `<span class="empty">${error.message}</span>`;
-    }
+    console.error(error.message || "Unable to load admin dashboard.");
   } finally {
     state.isLoading = false;
     if (refreshButton) {
