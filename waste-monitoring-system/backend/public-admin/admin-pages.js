@@ -6,6 +6,7 @@ const state = {
   payload: null,
   searchTerm: "",
   isLoading: false,
+  needsRefresh: false,
   drivers: [],
   tripTickets: [],
   charts: {
@@ -2143,10 +2144,16 @@ function applyPayload(payload) {
   renderRecentActivity(state.payload?.reports || [], state.payload?.trucks || []);
 }
 async function fetchDashboard() {
-  if (!state.token || state.isLoading) {
+  if (!state.token) {
     return;
   }
 
+  if (state.isLoading) {
+    state.needsRefresh = true;
+    return;
+  }
+
+  state.needsRefresh = false;
   state.isLoading = true;
   const refreshButton = document.getElementById("refreshButton");
 
@@ -2183,6 +2190,11 @@ async function fetchDashboard() {
     if (refreshButton) {
       refreshButton.disabled = false;
       refreshButton.textContent = "Refresh";
+    }
+
+    if (state.needsRefresh) {
+      state.needsRefresh = false;
+      window.setTimeout(() => refreshCurrentPageData(), 0);
     }
   }
 }

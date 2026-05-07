@@ -59,6 +59,7 @@ const MONGODB_DB = process.env.MONGODB_DB || "waste_monitoring_system";
 const ADMIN_PUBLIC_DIR = path.join(__dirname, "public-admin");
 const MOBILE_ASSETS_DIR = path.join(__dirname, "..", "mobile", "assets");
 const ADMIN_STATIC_CACHE_CONTROL = "no-store, no-cache, must-revalidate, proxy-revalidate";
+const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Manila";
 
 const USER_ROLES = {
   citizen: "citizen",
@@ -493,6 +494,22 @@ function toIsoString(value) {
   return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
 }
 
+function getDateKeyInTimeZone(value, timeZone = APP_TIME_ZONE) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
 function sanitizeTruck(truck) {
   return {
     truckId: truck.truckId,
@@ -601,6 +618,8 @@ function sanitizeTripTicket(ticket) {
     mmdaUseOnly: ticket.mmdaUseOnly || "",
     remarks: ticket.remarks || "",
     durationMinutes: getTripTicketDurationMinutes(ticket),
+    createdAt: toIsoString(ticket.createdAt),
+    updatedAt: toIsoString(ticket.updatedAt),
   };
 }
 
@@ -704,8 +723,7 @@ async function getTripTicketList(limit = 120) {
 }
 
 function buildTripTicketAnalytics(tripTickets = []) {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  const todayKey = getDateKeyInTimeZone(new Date());
   const completedStatuses = new Set(["Completed", "Delayed"]);
 
   const summary = {
@@ -735,11 +753,12 @@ function buildTripTicketAnalytics(tripTickets = []) {
 
   tripTickets.forEach((ticket) => {
     const departureAt = new Date(ticket.departureAt || 0);
+    const loggedAt = new Date(ticket.createdAt || ticket.departureAt || 0);
     const status = String(ticket.status || "Unknown");
     const volumeKg = Number(ticket.volumeKg || 0);
     const durationMinutes = Number(ticket.durationMinutes);
 
-    if (!Number.isNaN(departureAt.getTime()) && departureAt >= startOfToday) {
+    if (getDateKeyInTimeZone(loggedAt) === todayKey) {
       summary.ticketsToday += 1;
     }
 
