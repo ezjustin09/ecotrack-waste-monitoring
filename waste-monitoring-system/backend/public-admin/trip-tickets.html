@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Trip Tickets</title>
-    <link rel="stylesheet" href="/admin/styles.css?v=20260413c" />
+    <link rel="stylesheet" href="/admin/styles.css?v=20260413d" />
   </head>
   <body data-page="trip-tickets">
     <div class="admin-shell">
@@ -43,159 +43,65 @@
               <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
             </div>
 
-            <form id="tripTicketForm" class="schedule-form trip-ticket-paper-form" autocomplete="off">
+            <form id="tripTicketForm" class="schedule-form" autocomplete="off">
               <input type="hidden" id="tripTicketEditingId" />
 
-              <div class="trip-ticket-paper-header">
-                <div>
-                  <span class="trip-ticket-kicker">Collection Dispatch Form</span>
-                  <h3>Trip Ticket</h3>
-                </div>
-                <div class="trip-ticket-id-preview">
-                  <span>Ticket No.</span>
-                  <strong id="tripTicketNumberPreview">Auto-generated</strong>
-                </div>
-              </div>
+              <div class="trip-ticket-form-grid">
+                <label class="form-field">
+                  <span>Truck ID</span>
+                  <input id="tripTicketTruckId" type="text" list="tripTicketTruckOptions" placeholder="TRUCK-002" required />
+                </label>
 
-              <div class="trip-ticket-form-section">
-                <h3 class="trip-ticket-form-section-title">Vehicle Information</h3>
-                <div class="trip-ticket-form-grid">
-                  <label class="form-field">
-                    <span>Truck ID</span>
-                    <input id="tripTicketTruckId" type="text" list="tripTicketTruckOptions" placeholder="TRUCK-002" required />
-                  </label>
+                <label class="form-field">
+                  <span>Driver Name</span>
+                  <input id="tripTicketDriverName" type="text" list="tripTicketDriverOptions" placeholder="Assigned driver" required />
+                </label>
 
-                  <label class="form-field">
-                    <span>Plate No.</span>
-                    <input id="tripTicketPlateNo" type="text" placeholder="ABC 1234" />
-                  </label>
+                <label class="form-field">
+                  <span>Barangay</span>
+                  <input id="tripTicketBarangay" type="text" placeholder="San Pedro" required />
+                </label>
 
-                  <label class="form-field">
-                    <span>Body No.</span>
-                    <input id="tripTicketBodyNo" type="text" placeholder="12K" />
-                  </label>
+                <label class="form-field">
+                  <span>Waste Type</span>
+                  <input id="tripTicketWasteType" type="text" placeholder="Biodegradable" required />
+                </label>
 
-                  <label class="form-field">
-                    <span>Truck Type</span>
-                    <input id="tripTicketTruckType" type="text" placeholder="Compactor" />
-                  </label>
+                <label class="form-field">
+                  <span>Scheduled Window</span>
+                  <input id="tripTicketScheduledWindow" type="text" placeholder="6:00 AM - 10:00 AM" required />
+                </label>
 
-                  <label class="form-field">
-                    <span>Total Distance (km)</span>
-                    <input id="tripTicketTotalDistanceKm" type="number" min="0" step="0.1" placeholder="0" />
-                  </label>
+                <label class="form-field">
+                  <span>Status</span>
+                  <select id="tripTicketStatus" required>
+                    <option>Scheduled</option>
+                    <option>On Route</option>
+                    <option>Completed</option>
+                    <option>Delayed</option>
+                    <option>Missed</option>
+                  </select>
+                </label>
 
-                  <label class="form-field">
-                    <span>Status</span>
-                    <select id="tripTicketStatus" required>
-                      <option>Scheduled</option>
-                      <option>On Route</option>
-                      <option>Completed</option>
-                      <option>Delayed</option>
-                      <option>Missed</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
+                <label class="form-field">
+                  <span>Departure Time</span>
+                  <input id="tripTicketDepartureAt" type="datetime-local" required />
+                </label>
 
-              <div class="trip-ticket-form-section">
-                <h3 class="trip-ticket-form-section-title">Collection Details</h3>
-                <div class="trip-ticket-form-grid">
-                  <label class="form-field">
-                    <span>Barangay</span>
-                    <input id="tripTicketBarangay" type="text" placeholder="San Pedro" required />
-                  </label>
+                <label class="form-field">
+                  <span>Completed Time</span>
+                  <input id="tripTicketCompletedAt" type="datetime-local" />
+                </label>
 
-                  <label class="form-field">
-                    <span>Route / Area of Collection</span>
-                    <input id="tripTicketRouteArea" type="text" placeholder="Route 1 - P. Rosales Street" />
-                  </label>
+                <label class="form-field">
+                  <span>Volume (kg)</span>
+                  <input id="tripTicketVolumeKg" type="number" min="0" step="0.1" placeholder="0" />
+                </label>
 
-                  <label class="form-field">
-                    <span>Waste Type</span>
-                    <input id="tripTicketWasteType" type="text" placeholder="Biodegradable" required />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Scheduled Window</span>
-                    <input id="tripTicketScheduledWindow" type="text" placeholder="6:00 AM - 10:00 AM" required />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Collection From</span>
-                    <input id="tripTicketCollectionHoursFrom" type="time" />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Collection To</span>
-                    <input id="tripTicketCollectionHoursTo" type="time" />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Time Dispatched</span>
-                    <input id="tripTicketTimeDispatched" type="time" />
-                  </label>
-                </div>
-              </div>
-
-              <div class="trip-ticket-form-section">
-                <h3 class="trip-ticket-form-section-title">Crew and Disposal</h3>
-                <div class="trip-ticket-form-grid">
-                  <label class="form-field">
-                    <span>Driver Name</span>
-                    <input id="tripTicketDriverName" type="text" list="tripTicketDriverOptions" placeholder="Assigned driver" required />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Garbage Collectors</span>
-                    <input id="tripTicketGarbageCollectors" type="text" placeholder="Collector 1, Collector 2" />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Volume of Garbage (kg)</span>
-                    <input id="tripTicketVolumeKg" type="number" min="0" step="0.1" placeholder="0" />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Disposal Facility</span>
-                    <input id="tripTicketDisposalFacility" type="text" placeholder="MMDA / Transfer station" />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Contractor / Dispatcher</span>
-                    <input id="tripTicketContractorDispatcher" type="text" placeholder="Dispatcher name" />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Guide</span>
-                    <input id="tripTicketGuide" type="text" placeholder="Guide / inspector" />
-                  </label>
-                </div>
-              </div>
-
-              <div class="trip-ticket-form-section">
-                <h3 class="trip-ticket-form-section-title">Completion and Office Use</h3>
-                <div class="trip-ticket-form-grid">
-                  <label class="form-field">
-                    <span>Departure Time</span>
-                    <input id="tripTicketDepartureAt" type="datetime-local" required />
-                  </label>
-
-                  <label class="form-field">
-                    <span>Completed Time</span>
-                    <input id="tripTicketCompletedAt" type="datetime-local" />
-                  </label>
-
-                  <label class="form-field field-span-full trip-ticket-stamp-field">
-                    <span>Office Use / Stamp</span>
-                    <textarea id="tripTicketMmdaUseOnly" rows="2" placeholder="Received / approved / remarks"></textarea>
-                  </label>
-
-                  <label class="form-field field-span-full">
-                    <span>Remarks</span>
-                    <textarea id="tripTicketRemarks" rows="3" placeholder="Optional trip notes"></textarea>
-                  </label>
-                </div>
+                <label class="form-field field-span-full">
+                  <span>Remarks</span>
+                  <textarea id="tripTicketRemarks" rows="3" placeholder="Optional trip notes"></textarea>
+                </label>
               </div>
 
               <datalist id="tripTicketDriverOptions"></datalist>
@@ -219,13 +125,13 @@
                 <thead>
                   <tr>
                     <th>Ticket ID</th>
-                    <th>Vehicle</th>
-                    <th>Crew</th>
-                    <th>Route</th>
-                    <th>Collection Time</th>
-                    <th>Dispatch</th>
-                    <th>Waste / Volume</th>
-                    <th>Office Use</th>
+                    <th>Truck ID</th>
+                    <th>Driver</th>
+                    <th>Barangay</th>
+                    <th>Waste Type</th>
+                    <th>Window</th>
+                    <th>Departure</th>
+                    <th>Completed</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
@@ -239,6 +145,6 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/admin/admin-pages.js?v=20260413c" defer></script>
+    <script src="/admin/admin-pages.js?v=20260413d" defer></script>
   </body>
 </html>

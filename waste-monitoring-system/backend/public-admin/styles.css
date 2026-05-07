@@ -1145,7 +1145,7 @@ th {
 }
 
 .trip-ticket-feed-table {
-  min-width: 1480px;
+  min-width: 1180px;
 }
 
 @media (max-width: 640px) {

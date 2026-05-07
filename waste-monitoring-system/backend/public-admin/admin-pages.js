@@ -979,23 +979,11 @@ function renderTripTicketManagement(tripTickets = []) {
   const filtered = filterBySearch(tripTickets, [
     (ticket) => ticket.id,
     (ticket) => ticket.truckId,
-    (ticket) => ticket.plateNo,
-    (ticket) => ticket.bodyNo,
-    (ticket) => ticket.truckType,
     (ticket) => ticket.driverName,
-    (ticket) => ticket.garbageCollectors,
     (ticket) => ticket.barangay || ticket.zone,
-    (ticket) => ticket.routeArea,
     (ticket) => ticket.wasteType,
     (ticket) => ticket.scheduledWindow,
-    (ticket) => ticket.collectionHoursFrom,
-    (ticket) => ticket.collectionHoursTo,
-    (ticket) => ticket.timeDispatched,
     (ticket) => ticket.status,
-    (ticket) => ticket.disposalFacility,
-    (ticket) => ticket.contractorDispatcher,
-    (ticket) => ticket.guide,
-    (ticket) => ticket.mmdaUseOnly,
     (ticket) => ticket.remarks,
   ]);
 
@@ -1010,44 +998,17 @@ function renderTripTicketManagement(tripTickets = []) {
         .filter((value) => value && value !== "-")
         .join(" • ");
 
-      const vehicleMeta = [ticket.plateNo && `Plate: ${ticket.plateNo}`, ticket.bodyNo && `Body: ${ticket.bodyNo}`, ticket.truckType]
-        .filter(Boolean)
-        .join("<br />");
-      const crewMeta = [ticket.garbageCollectors && `Collectors: ${ticket.garbageCollectors}`, ticket.guide && `Guide: ${ticket.guide}`]
-        .filter(Boolean)
-        .join("<br />");
-      const routeMeta = [ticket.routeArea, ticket.barangay || ticket.zone].filter(Boolean).join("<br />");
-      const collectionTime = [
-        ticket.scheduledWindow,
-        ticket.collectionHoursFrom || ticket.collectionHoursTo
-          ? `${ticket.collectionHoursFrom || "--:--"} - ${ticket.collectionHoursTo || "--:--"}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("<br />");
-      const dispatchMeta = [
-        ticket.timeDispatched && `Dispatched: ${ticket.timeDispatched}`,
-        `Departed: ${formatDateTime(ticket.departureAt)}`,
-        ticket.completedAt && `Completed: ${formatDateTime(ticket.completedAt)}`,
-      ]
-        .filter(Boolean)
-        .join("<br />");
-      const wasteMeta = [ticket.wasteType || "-", Number(ticket.totalDistanceKm) > 0 ? `${ticket.totalDistanceKm} km` : "", statusMeta]
-        .filter(Boolean)
-        .join("<br />");
-      const officeMeta = [ticket.disposalFacility, ticket.contractorDispatcher, ticket.mmdaUseOnly].filter(Boolean).join("<br />");
-
       return `
         <tr>
           <td>${ticket.id}</td>
-          <td>${ticket.truckId || "-"}${vehicleMeta ? `<br /><small>${vehicleMeta}</small>` : ""}</td>
-          <td>${ticket.driverName || "-"}${crewMeta ? `<br /><small>${crewMeta}</small>` : ""}</td>
-          <td>${routeMeta || "-"}</td>
-          <td>${collectionTime || "-"}</td>
-          <td>${dispatchMeta || "-"}</td>
-          <td>${wasteMeta || "-"}${ticket.remarks ? `<br /><small>${truncate(ticket.remarks, 44)}</small>` : ""}</td>
-          <td>${officeMeta || "-"}</td>
-          <td>${ticket.status || "-"}</td>
+          <td>${ticket.truckId || "-"}</td>
+          <td>${ticket.driverName || "-"}</td>
+          <td>${ticket.barangay || ticket.zone || "-"}</td>
+          <td>${ticket.wasteType || "-"}${ticket.remarks ? `<br /><small>${truncate(ticket.remarks, 44)}</small>` : ""}</td>
+          <td>${ticket.scheduledWindow || "-"}</td>
+          <td>${formatDateTime(ticket.departureAt)}</td>
+          <td>${ticket.completedAt ? formatDateTime(ticket.completedAt) : "-"}</td>
+          <td>${ticket.status || "-"}${statusMeta ? `<br /><small>${statusMeta}</small>` : ""}</td>
           <td>
             <div class="table-actions">
               <button type="button" class="schedule-edit-btn" data-trip-ticket-action="edit" data-trip-ticket-id="${ticket.id}">Edit</button>
@@ -1062,56 +1023,29 @@ function renderTripTicketManagement(tripTickets = []) {
 
 function setTripTicketForm(ticket = null) {
   const idInput = document.getElementById("tripTicketEditingId");
-  const ticketNumberPreview = document.getElementById("tripTicketNumberPreview");
   const truckIdInput = document.getElementById("tripTicketTruckId");
-  const plateNoInput = document.getElementById("tripTicketPlateNo");
-  const bodyNoInput = document.getElementById("tripTicketBodyNo");
-  const truckTypeInput = document.getElementById("tripTicketTruckType");
-  const totalDistanceKmInput = document.getElementById("tripTicketTotalDistanceKm");
   const driverNameInput = document.getElementById("tripTicketDriverName");
-  const garbageCollectorsInput = document.getElementById("tripTicketGarbageCollectors");
   const barangayInput = document.getElementById("tripTicketBarangay");
-  const routeAreaInput = document.getElementById("tripTicketRouteArea");
   const wasteTypeInput = document.getElementById("tripTicketWasteType");
   const scheduledWindowInput = document.getElementById("tripTicketScheduledWindow");
-  const collectionHoursFromInput = document.getElementById("tripTicketCollectionHoursFrom");
-  const collectionHoursToInput = document.getElementById("tripTicketCollectionHoursTo");
-  const timeDispatchedInput = document.getElementById("tripTicketTimeDispatched");
   const departureAtInput = document.getElementById("tripTicketDepartureAt");
   const completedAtInput = document.getElementById("tripTicketCompletedAt");
   const statusInput = document.getElementById("tripTicketStatus");
   const volumeKgInput = document.getElementById("tripTicketVolumeKg");
-  const disposalFacilityInput = document.getElementById("tripTicketDisposalFacility");
-  const contractorDispatcherInput = document.getElementById("tripTicketContractorDispatcher");
-  const guideInput = document.getElementById("tripTicketGuide");
-  const mmdaUseOnlyInput = document.getElementById("tripTicketMmdaUseOnly");
   const remarksInput = document.getElementById("tripTicketRemarks");
   const saveButton = document.getElementById("tripTicketSaveButton");
 
   if (
     !idInput ||
     !truckIdInput ||
-    !plateNoInput ||
-    !bodyNoInput ||
-    !truckTypeInput ||
-    !totalDistanceKmInput ||
     !driverNameInput ||
-    !garbageCollectorsInput ||
     !barangayInput ||
-    !routeAreaInput ||
     !wasteTypeInput ||
     !scheduledWindowInput ||
-    !collectionHoursFromInput ||
-    !collectionHoursToInput ||
-    !timeDispatchedInput ||
     !departureAtInput ||
     !completedAtInput ||
     !statusInput ||
     !volumeKgInput ||
-    !disposalFacilityInput ||
-    !contractorDispatcherInput ||
-    !guideInput ||
-    !mmdaUseOnlyInput ||
     !remarksInput
   ) {
     return;
@@ -1119,31 +1053,15 @@ function setTripTicketForm(ticket = null) {
 
   if (!ticket) {
     idInput.value = "";
-    if (ticketNumberPreview) {
-      ticketNumberPreview.textContent = "Auto-generated";
-    }
     truckIdInput.value = "";
-    plateNoInput.value = "";
-    bodyNoInput.value = "";
-    truckTypeInput.value = "";
-    totalDistanceKmInput.value = "";
     driverNameInput.value = "";
-    garbageCollectorsInput.value = "";
     barangayInput.value = "";
-    routeAreaInput.value = "";
     wasteTypeInput.value = "";
     scheduledWindowInput.value = "";
-    collectionHoursFromInput.value = "";
-    collectionHoursToInput.value = "";
-    timeDispatchedInput.value = "";
     departureAtInput.value = "";
     completedAtInput.value = "";
     statusInput.value = "Scheduled";
     volumeKgInput.value = "";
-    disposalFacilityInput.value = "";
-    contractorDispatcherInput.value = "";
-    guideInput.value = "";
-    mmdaUseOnlyInput.value = "";
     remarksInput.value = "";
     if (saveButton) {
       saveButton.textContent = "Save Trip Ticket";
@@ -1152,32 +1070,15 @@ function setTripTicketForm(ticket = null) {
   }
 
   idInput.value = ticket.id || "";
-  if (ticketNumberPreview) {
-    ticketNumberPreview.textContent = ticket.id || "Auto-generated";
-  }
   truckIdInput.value = ticket.truckId || "";
-  plateNoInput.value = ticket.plateNo || "";
-  bodyNoInput.value = ticket.bodyNo || "";
-  truckTypeInput.value = ticket.truckType || "";
-  totalDistanceKmInput.value =
-    Number.isFinite(Number(ticket.totalDistanceKm)) && Number(ticket.totalDistanceKm) > 0 ? String(ticket.totalDistanceKm) : "";
   driverNameInput.value = ticket.driverName || "";
-  garbageCollectorsInput.value = ticket.garbageCollectors || "";
   barangayInput.value = ticket.barangay || ticket.zone || "";
-  routeAreaInput.value = ticket.routeArea || "";
   wasteTypeInput.value = ticket.wasteType || "";
   scheduledWindowInput.value = ticket.scheduledWindow || "";
-  collectionHoursFromInput.value = ticket.collectionHoursFrom || "";
-  collectionHoursToInput.value = ticket.collectionHoursTo || "";
-  timeDispatchedInput.value = ticket.timeDispatched || "";
   departureAtInput.value = formatDateTimeInputValue(ticket.departureAt);
   completedAtInput.value = formatDateTimeInputValue(ticket.completedAt);
   statusInput.value = ticket.status || "Scheduled";
   volumeKgInput.value = Number.isFinite(Number(ticket.volumeKg)) && Number(ticket.volumeKg) > 0 ? String(ticket.volumeKg) : "";
-  disposalFacilityInput.value = ticket.disposalFacility || "";
-  contractorDispatcherInput.value = ticket.contractorDispatcher || "";
-  guideInput.value = ticket.guide || "";
-  mmdaUseOnlyInput.value = ticket.mmdaUseOnly || "";
   remarksInput.value = ticket.remarks || "";
   if (saveButton) {
     saveButton.textContent = `Update ${ticket.id}`;
