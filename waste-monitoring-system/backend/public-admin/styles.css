@@ -1036,6 +1036,82 @@ th {
   resize: vertical;
 }
 
+.trip-ticket-paper-form {
+  gap: 12px;
+  border: 1px solid #d6d3c7;
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(0deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px) 0 0 / 28px 28px,
+    #fffdf5;
+}
+
+.trip-ticket-paper-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  border: 2px solid #111827;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.trip-ticket-kicker {
+  display: block;
+  color: var(--slate-500);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.trip-ticket-paper-header h3 {
+  margin: 2px 0 0;
+  color: var(--slate-900);
+  font-size: 24px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.trip-ticket-id-preview {
+  min-width: 160px;
+  border-left: 1px solid #d1d5db;
+  padding-left: 14px;
+  text-align: right;
+}
+
+.trip-ticket-id-preview span {
+  display: block;
+  color: var(--slate-500);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trip-ticket-id-preview strong {
+  color: #b91c1c;
+  font-size: 16px;
+}
+
+.trip-ticket-form-section {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.trip-ticket-form-section-title {
+  margin: 0 0 10px;
+  color: var(--green-700);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .trip-ticket-form-grid {
   display: grid;
   gap: 10px;
@@ -1060,8 +1136,41 @@ th {
   grid-column: 1 / -1;
 }
 
+.trip-ticket-stamp-field textarea {
+  min-height: 72px;
+  color: #991b1b;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .trip-ticket-feed-table {
-  min-width: 1180px;
+  min-width: 1480px;
+}
+
+@media (max-width: 640px) {
+  .trip-ticket-paper-form {
+    padding: 10px;
+  }
+
+  .trip-ticket-paper-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .trip-ticket-paper-header h3 {
+    font-size: 20px;
+  }
+
+  .trip-ticket-id-preview {
+    width: 100%;
+    min-width: 0;
+    border-top: 1px solid #d1d5db;
+    border-left: 0;
+    padding-top: 10px;
+    padding-left: 0;
+    text-align: left;
+  }
 }
 
 .schedule-form-actions {

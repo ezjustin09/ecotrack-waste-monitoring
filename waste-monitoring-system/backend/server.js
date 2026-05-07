@@ -577,7 +577,16 @@ function sanitizeTripTicket(ticket) {
   return {
     id: ticket.id,
     truckId: ticket.truckId,
+    plateNo: ticket.plateNo || "",
+    bodyNo: ticket.bodyNo || "",
+    truckType: ticket.truckType || "",
+    totalDistanceKm: Number(ticket.totalDistanceKm || 0),
     driverName: ticket.driverName || "",
+    garbageCollectors: ticket.garbageCollectors || "",
+    collectionHoursFrom: ticket.collectionHoursFrom || "",
+    collectionHoursTo: ticket.collectionHoursTo || "",
+    timeDispatched: ticket.timeDispatched || "",
+    routeArea: ticket.routeArea || "",
     barangay,
     zone: barangay,
     wasteType: ticket.wasteType || "",
@@ -586,6 +595,10 @@ function sanitizeTripTicket(ticket) {
     completedAt: toIsoString(ticket.completedAt),
     status: ticket.status || "Unknown",
     volumeKg: Number(ticket.volumeKg || 0),
+    disposalFacility: ticket.disposalFacility || "",
+    contractorDispatcher: ticket.contractorDispatcher || "",
+    guide: ticket.guide || "",
+    mmdaUseOnly: ticket.mmdaUseOnly || "",
     remarks: ticket.remarks || "",
     durationMinutes: getTripTicketDurationMinutes(ticket),
   };
@@ -2193,12 +2206,29 @@ function normalizeFeedPayload(payload = {}) {
 
 function normalizeTripTicketPayload(payload = {}) {
   const truckId = normalizeTruckId(payload.truckId);
+  const plateNo = String(payload.plateNo || "").trim();
+  const bodyNo = String(payload.bodyNo || "").trim();
+  const truckType = String(payload.truckType || "").trim();
   const driverName = String(payload.driverName || "").trim();
+  const garbageCollectors = String(payload.garbageCollectors || "").trim();
+  const collectionHoursFrom = String(payload.collectionHoursFrom || "").trim();
+  const collectionHoursTo = String(payload.collectionHoursTo || "").trim();
+  const timeDispatched = String(payload.timeDispatched || "").trim();
+  const routeArea = String(payload.routeArea || "").trim();
   const barangay = String(payload.barangay || payload.zone || "").trim();
   const wasteType = String(payload.wasteType || "").trim();
   const scheduledWindow = String(payload.scheduledWindow || "").trim();
   const remarks = String(payload.remarks || "").trim();
+  const disposalFacility = String(payload.disposalFacility || "").trim();
+  const contractorDispatcher = String(payload.contractorDispatcher || "").trim();
+  const guide = String(payload.guide || "").trim();
+  const mmdaUseOnly = String(payload.mmdaUseOnly || "").trim();
   const status = String(payload.status || "Scheduled").trim() || "Scheduled";
+  const rawTotalDistanceKm = payload.totalDistanceKm;
+  const totalDistanceKm =
+    rawTotalDistanceKm === "" || rawTotalDistanceKm === null || typeof rawTotalDistanceKm === "undefined"
+      ? 0
+      : Number(rawTotalDistanceKm);
   const rawVolumeKg = payload.volumeKg;
   const volumeKg =
     rawVolumeKg === "" || rawVolumeKg === null || typeof rawVolumeKg === "undefined"
@@ -2243,6 +2273,12 @@ function normalizeTripTicketPayload(payload = {}) {
     };
   }
 
+  if (!Number.isFinite(totalDistanceKm) || totalDistanceKm < 0) {
+    return {
+      error: "totalDistanceKm must be a valid positive number",
+    };
+  }
+
   if (completedAt && completedAt.getTime() <= departureAt.getTime()) {
     return {
       error: "completedAt must be later than departureAt",
@@ -2257,7 +2293,16 @@ function normalizeTripTicketPayload(payload = {}) {
 
   return {
     truckId,
+    plateNo,
+    bodyNo,
+    truckType,
+    totalDistanceKm,
     driverName,
+    garbageCollectors,
+    collectionHoursFrom,
+    collectionHoursTo,
+    timeDispatched,
+    routeArea,
     barangay,
     wasteType,
     scheduledWindow,
@@ -2265,6 +2310,10 @@ function normalizeTripTicketPayload(payload = {}) {
     completedAt,
     status,
     volumeKg,
+    disposalFacility,
+    contractorDispatcher,
+    guide,
+    mmdaUseOnly,
     remarks,
   };
 }
@@ -3156,7 +3205,16 @@ app.post(
     const tripTicket = {
       id: await nextTripTicketId(),
       truckId: payload.truckId,
+      plateNo: payload.plateNo,
+      bodyNo: payload.bodyNo,
+      truckType: payload.truckType,
+      totalDistanceKm: payload.totalDistanceKm,
       driverName: payload.driverName,
+      garbageCollectors: payload.garbageCollectors,
+      collectionHoursFrom: payload.collectionHoursFrom,
+      collectionHoursTo: payload.collectionHoursTo,
+      timeDispatched: payload.timeDispatched,
+      routeArea: payload.routeArea,
       barangay: payload.barangay,
       wasteType: payload.wasteType,
       scheduledWindow: payload.scheduledWindow,
@@ -3164,6 +3222,10 @@ app.post(
       completedAt: payload.completedAt || null,
       status: payload.status,
       volumeKg: payload.volumeKg,
+      disposalFacility: payload.disposalFacility,
+      contractorDispatcher: payload.contractorDispatcher,
+      guide: payload.guide,
+      mmdaUseOnly: payload.mmdaUseOnly,
       remarks: payload.remarks,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -3215,7 +3277,16 @@ app.put(
       {
         $set: {
           truckId: payload.truckId,
+          plateNo: payload.plateNo,
+          bodyNo: payload.bodyNo,
+          truckType: payload.truckType,
+          totalDistanceKm: payload.totalDistanceKm,
           driverName: payload.driverName,
+          garbageCollectors: payload.garbageCollectors,
+          collectionHoursFrom: payload.collectionHoursFrom,
+          collectionHoursTo: payload.collectionHoursTo,
+          timeDispatched: payload.timeDispatched,
+          routeArea: payload.routeArea,
           barangay: payload.barangay,
           wasteType: payload.wasteType,
           scheduledWindow: payload.scheduledWindow,
@@ -3223,6 +3294,10 @@ app.put(
           completedAt: payload.completedAt || null,
           status: payload.status,
           volumeKg: payload.volumeKg,
+          disposalFacility: payload.disposalFacility,
+          contractorDispatcher: payload.contractorDispatcher,
+          guide: payload.guide,
+          mmdaUseOnly: payload.mmdaUseOnly,
           remarks: payload.remarks,
           updatedAt: new Date(),
         },
