@@ -219,6 +219,27 @@ export async function updateProfilePicture(avatarUrl, token) {
   return parseJsonResponse(response);
 }
 
+async function updateDriverLiveSharingTripTicket(action, truckId, occurredAt, token) {
+  const response = await fetch(`${API_BASE_URL}/driver/live-sharing/${action}`, {
+    method: "POST",
+    headers: buildHeaders(token),
+    body: JSON.stringify({
+      truckId,
+      occurredAt,
+    }),
+  });
+
+  return parseJsonResponse(response);
+}
+
+export async function markTripDepartureFromLiveSharing(truckId, occurredAt, token) {
+  return updateDriverLiveSharingTripTicket("start", truckId, occurredAt, token);
+}
+
+export async function markTripCompletionFromLiveSharing(truckId, occurredAt, token) {
+  return updateDriverLiveSharingTripTicket("stop", truckId, occurredAt, token);
+}
+
 export async function registerPushToken(pushToken, token, platform = Platform.OS) {
   const response = await fetch(`${API_BASE_URL}/users/push-token`, {
     method: "POST",

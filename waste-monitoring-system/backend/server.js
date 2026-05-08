@@ -1031,6 +1031,159 @@ async function findTripTicketById(ticketId) {
   return tripTicketsCollection.findOne({ id: ticketId });
 }
 
+function getTripTicketStatusPriority(status, preferredStatuses = []) {
+  const normalizedStatus = String(status || "").trim();
+  const index = preferredStatuses.indexOf(normalizedStatus);
+  return index >= 0 ? index : preferredStatuses.length + 1;
+}
+
+async function findDriverTripTicketForSharing({ truckId, driverName = "", occurredAt = new Date(), preferredStatuses = [] }) {
+  if (!truckId) {
+    return null;
+  }
+
+  const rows = await tripTicketsCollection
+    .find({
+      truckId,
+      status: { $in: ["Scheduled", "On Route"] },
+    })
+    .sort({ departureAt: -1, updatedAt: -1, createdAt: -1 })
+    .limit(25)
+    .toArray();
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const normalizedDriverName = String(driverName || "").trim().toLowerCase();
+  const matchingDriverRows = normalizedDriverName
+    ? rows.filter((ticket) => String(ticket.driverName || "").trim().toLowerCase() === normalizedDriverName)
+    : [];
+  const candidates = matchingDriverRows.length > 0 ? matchingDriverRows : rows;
+  const occurredAtTime = occurredAt.getTime();
+  const occurredAtDateKey = getDateKeyInTimeZone(occurredAt);
+
+  return [...candidates].sort((first, second) => {
+    const firstDateKey = getDateKeyInTimeZone(first.departureAt || first.createdAt);
+    const secondDateKey = getDateKeyInTimeZone(second.departureAt || second.createdAt);
+    const firstSameDayRank = firstDateKey === occurredAtDateKey ? 0 : 1;
+    const secondSameDayRank = secondDateKey === occurredAtDateKey ? 0 : 1;
+
+    if (firstSameDayRank !== secondSameDayRank) {
+      return firstSameDayRank - secondSameDayRank;
+    }
+
+    const firstStatusPriority = getTripTicketStatusPriority(first.status, preferredStatuses);
+    const secondStatusPriority = getTripTicketStatusPriority(second.status, preferredStatuses);
+
+    if (firstStatusPriority !== secondStatusPriority) {
+      return firstStatusPriority - secondStatusPriority;
+    }
+
+    const firstDepartureTime = new Date(first.departureAt || first.createdAt || 0).getTime();
+    const secondDepartureTime = new Date(second.departureAt || second.createdAt || 0).getTime();
+    const firstDistance = Number.isFinite(firstDepartureTime) ? Math.abs(firstDepartureTime - occurredAtTime) : Number.MAX_SAFE_INTEGER;
+    const secondDistance = Number.isFinite(secondDepartureTime) ? Math.abs(secondDepartureTime - occurredAtTime) : Number.MAX_SAFE_INTEGER;
+
+    if (firstDistance !== secondDistance) {
+      return firstDistance - secondDistance;
+    }
+
+    const firstUpdatedTime = new Date(first.updatedAt || first.createdAt || 0).getTime();
+    const secondUpdatedTime = new Date(second.updatedAt || second.createdAt || 0).getTime();
+
+    return secondUpdatedTime - firstUpdatedTime;
+  })[0];
+}
+
+function normalizeDriverTripSharingPayload(payload = {}, fallbackTruckId = "") {
+  const truckId = normalizeTruckId(payload.truckId || fallbackTruckId);
+  const occurredAt = payload.occurredAt ? new Date(payload.occurredAt) : null;
+
+  if (!truckId) {
+    return {
+      error: "truckId is required",
+    };
+  }
+
+  if (isBlockedTruckId(truckId)) {
+    return {
+      error: "TRUCK-001 is reserved and cannot be used",
+    };
+  }
+
+  if (!occurredAt || Number.isNaN(occurredAt.getTime())) {
+    return {
+      error: "occurredAt must be a valid date and time",
+    };
+  }
+
+  return {
+    truckId,
+    occurredAt,
+  };
+}
+
+async function syncDriverTripTicketSharing({
+  phase,
+  truckId,
+  driverName = "",
+  occurredAt,
+}) {
+  const preferredStatuses = phase === "stop" ? ["On Route", "Scheduled"] : ["Scheduled", "On Route"];
+  const targetTripTicket = await findDriverTripTicketForSharing({
+    truckId,
+    driverName,
+    occurredAt,
+    preferredStatuses,
+  });
+
+  if (!targetTripTicket) {
+    return null;
+  }
+
+  const nextFields = {
+    updatedAt: new Date(),
+  };
+  const parsedDepartureAt = new Date(targetTripTicket.departureAt || 0);
+  const hasValidDepartureAt = Number.isFinite(parsedDepartureAt.getTime());
+
+  if (driverName) {
+    nextFields.driverName = driverName;
+  }
+
+  if (phase === "start") {
+    nextFields.departureAt = occurredAt;
+    nextFields.completedAt = null;
+    nextFields.status = "On Route";
+  } else {
+    nextFields.completedAt = occurredAt;
+    nextFields.status = "Completed";
+
+    if (!hasValidDepartureAt || parsedDepartureAt.getTime() > occurredAt.getTime()) {
+      nextFields.departureAt = occurredAt;
+    }
+  }
+
+  const updateResult = await tripTicketsCollection.findOneAndUpdate(
+    { id: targetTripTicket.id },
+    {
+      $set: nextFields,
+    },
+    { returnDocument: "after" }
+  );
+
+  const updatedTripTicket = updateResult?.value || updateResult;
+
+  if (!updatedTripTicket) {
+    return null;
+  }
+
+  const publicTripTicket = sanitizeTripTicket(updatedTripTicket);
+  io.emit("trip-ticket:updated", publicTripTicket);
+  return publicTripTicket;
+}
+
 async function getDriverList() {
   const rows = await usersCollection.find({ role: USER_ROLES.driver }).sort({ createdAt: -1 }).toArray();
   return rows.map(sanitizeDriver);
@@ -2800,6 +2953,8 @@ app.get("/", (req, res) => {
       "POST /auth/forgot-password",
       "POST /auth/reset-password",
       "POST /auth/change-password",
+      "POST /driver/live-sharing/start",
+      "POST /driver/live-sharing/stop",
       "PUT /users/profile-picture",
       "POST /users/push-token",
       "POST /users/push-token/remove",
@@ -4039,6 +4194,76 @@ app.post(
     res.status(200).json({
       message: "Login successful.",
       ...session,
+    });
+  })
+);
+
+app.post(
+  "/driver/live-sharing/start",
+  authenticateRequest,
+  authorizeRoles(USER_ROLES.driver),
+  asyncRoute(async (req, res) => {
+    const payload = normalizeDriverTripSharingPayload(req.body, req.user.truckId);
+
+    if (payload.error) {
+      res.status(400).json({
+        error: payload.error,
+      });
+      return;
+    }
+
+    const tripTicket = await syncDriverTripTicketSharing({
+      phase: "start",
+      truckId: payload.truckId,
+      driverName: req.user.name,
+      occurredAt: payload.occurredAt,
+    });
+
+    if (!tripTicket) {
+      res.status(404).json({
+        error: "No scheduled trip ticket found for this truck.",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Trip ticket departure time updated.",
+      tripTicket,
+    });
+  })
+);
+
+app.post(
+  "/driver/live-sharing/stop",
+  authenticateRequest,
+  authorizeRoles(USER_ROLES.driver),
+  asyncRoute(async (req, res) => {
+    const payload = normalizeDriverTripSharingPayload(req.body, req.user.truckId);
+
+    if (payload.error) {
+      res.status(400).json({
+        error: payload.error,
+      });
+      return;
+    }
+
+    const tripTicket = await syncDriverTripTicketSharing({
+      phase: "stop",
+      truckId: payload.truckId,
+      driverName: req.user.name,
+      occurredAt: payload.occurredAt,
+    });
+
+    if (!tripTicket) {
+      res.status(404).json({
+        error: "No active trip ticket found for this truck.",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Trip ticket completed time updated.",
+      tripTicket,
     });
   })
 );

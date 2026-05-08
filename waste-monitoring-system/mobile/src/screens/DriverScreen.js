@@ -14,6 +14,10 @@ import {
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
+import {
+  markTripCompletionFromLiveSharing,
+  markTripDepartureFromLiveSharing,
+} from "../services/api";
 import { createTruckSocket } from "../services/socket";
 
 const TRUCK_STATUSES = ["Collecting", "On Route", "Idle"];
@@ -39,7 +43,7 @@ function isBlockedTruckId(truckId) {
 }
 
 export default function DriverScreen() {
-  const { user } = useAuth();
+  const { token, user, signOut } = useAuth();
   const assignedTruckId = isBlockedTruckId(user?.truckId || "") ? "" : user?.truckId || "";
   const socketRef = useRef(null);
   const locationSubscriptionRef = useRef(null);
@@ -183,6 +187,39 @@ export default function DriverScreen() {
     });
   }, [sharing, status]);
 
+  function handleAuthError(message) {
+    if (message === "Authentication required" || message === "Invalid or expired session") {
+      signOut();
+      return true;
+    }
+
+    return false;
+  }
+
+  function getActiveTruckId() {
+    return normalizeTruckId(assignedTruckId || truckId);
+  }
+
+  async function syncTripTicketSharingPhase(phase, occurredAt, activeTruckId) {
+    if (!token) {
+      return null;
+    }
+
+    try {
+      if (phase === "start") {
+        return await markTripDepartureFromLiveSharing(activeTruckId, occurredAt, token);
+      }
+
+      return await markTripCompletionFromLiveSharing(activeTruckId, occurredAt, token);
+    } catch (error) {
+      if (handleAuthError(error.message)) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
   async function requestLiveLocation() {
     const { status: permissionStatus } = await Location.requestForegroundPermissionsAsync();
 
@@ -269,6 +306,7 @@ export default function DriverScreen() {
   }
 
   async function startSharing() {
+    const pressedAt = new Date().toISOString();
     setLoading(true);
 
     try {
@@ -297,6 +335,12 @@ export default function DriverScreen() {
 
       setSharing(true);
       setErrorMessage("");
+
+      try {
+        await syncTripTicketSharingPhase("start", pressedAt, getActiveTruckId());
+      } catch (error) {
+        setErrorMessage(`Live GPS started, but the departure time was not updated: ${error.message}`);
+      }
     } catch (error) {
       setSharing(false);
       setErrorMessage(error.message);
@@ -307,16 +351,27 @@ export default function DriverScreen() {
   }
 
   async function stopSharing() {
+    const pressedAt = new Date().toISOString();
+    const activeTruckId = getActiveTruckId();
+    setLoading(true);
     locationSubscriptionRef.current?.remove();
     locationSubscriptionRef.current = null;
     setSharing(false);
 
     try {
-      await removeTruckFromFleet();
+      const results = await Promise.allSettled([
+        removeTruckFromFleet(),
+        syncTripTicketSharingPhase("stop", pressedAt, activeTruckId),
+      ]);
+
+      const errors = results
+        .filter((result) => result.status === "rejected")
+        .map((result) => result.reason?.message || "Unable to finish the live sharing update.");
+
       setLastSyncedAt("");
-      setErrorMessage("");
-    } catch (error) {
-      setErrorMessage(error.message);
+      setErrorMessage(errors.join(" "));
+    } finally {
+      setLoading(false);
     }
   }
 
