@@ -170,25 +170,11 @@ export default function SettingsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
 
           <Pressable
-            style={[styles.navigationRow, { borderBottomColor: colors.borderSoft }]}
+            style={styles.navigationRow}
             onPress={() => setIsChangePasswordVisible(true)}
           >
             <Text style={[styles.preferenceLabel, { color: colors.text }]}>Change Password</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.logoutButton,
-              {
-                backgroundColor: colors.dangerSoft,
-                borderColor: colors.danger,
-              },
-            ]}
-            onPress={signOut}
-          >
-            <Ionicons name="log-out-outline" size={18} color={colors.danger} />
-            <Text style={[styles.logoutButtonText, { color: colors.danger }]}>Log out</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -244,10 +230,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottomWidth: 1,
     marginTop: 4,
-    marginBottom: 14,
-    paddingBottom: 14,
+    paddingVertical: 6,
   },
   preferenceLabel: {
     fontSize: 15,
@@ -267,19 +251,5 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     fontWeight: "700",
-  },
-  logoutButton: {
-    marginTop: 4,
-    minHeight: 54,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  logoutButtonText: {
-    fontSize: 15,
-    fontWeight: "800",
   },
 });

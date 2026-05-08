@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Easing,
   Image,
   Modal,
   Pressable,
@@ -300,6 +301,9 @@ export default function RootTabs({ onSignOut, user }) {
   const [profileImageUri, setProfileImageUri] = useState("");
   const [isUpdatingProfileImage, setIsUpdatingProfileImage] = useState(false);
   const [isUpdatingBarangay, setIsUpdatingBarangay] = useState(false);
+  const menuTranslateX = useRef(new Animated.Value(28)).current;
+  const menuCardOpacity = useRef(new Animated.Value(0)).current;
+  const menuBackdropOpacity = useRef(new Animated.Value(0)).current;
   const displayName = String(user?.name || user?.email || "Resident User").trim();
   const displayEmail = String(user?.email || "No email available").trim();
   const designatedBarangay = String(user?.barangay || "").trim();
@@ -339,17 +343,85 @@ export default function RootTabs({ onSignOut, user }) {
     };
   }, [profileStorageKey, user?.avatarUrl]);
 
+  useEffect(() => {
+    if (!isMenuVisible) {
+      return;
+    }
+
+    menuTranslateX.setValue(28);
+    menuCardOpacity.setValue(0);
+    menuBackdropOpacity.setValue(0);
+
+    Animated.parallel([
+      Animated.timing(menuTranslateX, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(menuCardOpacity, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(menuBackdropOpacity, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [isMenuVisible, menuBackdropOpacity, menuCardOpacity, menuTranslateX]);
+
+  function openMenu() {
+    if (isMenuVisible) {
+      return;
+    }
+
+    setIsMenuVisible(true);
+  }
+
+  function closeMenu(afterClose) {
+    if (!isMenuVisible) {
+      afterClose?.();
+      return;
+    }
+
+    Animated.parallel([
+      Animated.timing(menuTranslateX, {
+        toValue: 28,
+        duration: 180,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(menuCardOpacity, {
+        toValue: 0,
+        duration: 140,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(menuBackdropOpacity, {
+        toValue: 0,
+        duration: 140,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsMenuVisible(false);
+      afterClose?.();
+    });
+  }
+
   function openSettingsFromMenu() {
-    setIsMenuVisible(false);
-    setIsSettingsVisible(true);
+    closeMenu(() => setIsSettingsVisible(true));
   }
 
   function openProfileFromMenu() {
-    setIsMenuVisible(false);
-    setIsProfileVisible(true);
+    closeMenu(() => setIsProfileVisible(true));
   }
 
-  function handleMenuSignOut() {
+  function finalizeSignOut() {
     setIsMenuVisible(false);
     setIsProfileVisible(false);
     setIsSettingsVisible(false);
@@ -435,7 +507,7 @@ export default function RootTabs({ onSignOut, user }) {
       }
     } catch (error) {
       if (error?.message === "Authentication required" || error?.message === "Invalid or expired session") {
-        handleMenuSignOut();
+        finalizeSignOut();
         return;
       }
 
@@ -466,7 +538,7 @@ export default function RootTabs({ onSignOut, user }) {
       setIsBarangayPickerVisible(false);
     } catch (error) {
       if (error?.message === "Authentication required" || error?.message === "Invalid or expired session") {
-        handleMenuSignOut();
+        finalizeSignOut();
         return;
       }
 
@@ -501,7 +573,7 @@ export default function RootTabs({ onSignOut, user }) {
           },
           headerRight: () => (
             <Pressable
-              onPress={() => setIsMenuVisible(true)}
+              onPress={openMenu}
               style={[styles.headerMenuButton, { backgroundColor: colors.overlay }]}
               accessibilityRole="button"
               accessibilityLabel="Open menu"
@@ -530,18 +602,25 @@ export default function RootTabs({ onSignOut, user }) {
 
       <Modal
         visible={isMenuVisible}
-        animationType="fade"
+        animationType="none"
         transparent
-        onRequestClose={() => setIsMenuVisible(false)}
+        onRequestClose={() => closeMenu()}
       >
-        <Pressable style={styles.menuBackdrop} onPress={() => setIsMenuVisible(false)}>
-          <View
+        <View style={styles.menuModalLayer}>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.menuBackdropFill, { opacity: menuBackdropOpacity }]}
+          />
+          <Pressable style={styles.menuDismissLayer} onPress={() => closeMenu()} />
+          <Animated.View
             style={[
               styles.menuCard,
               {
                 top: Math.max(insets.top, 12) + 46,
                 backgroundColor: colors.card,
                 borderColor: colors.borderSoft,
+                opacity: menuCardOpacity,
+                transform: [{ translateX: menuTranslateX }],
               },
             ]}
           >
@@ -571,12 +650,12 @@ export default function RootTabs({ onSignOut, user }) {
               <Text style={[styles.menuItemText, { color: colors.text }]}>Settings</Text>
             </Pressable>
 
-            <Pressable style={[styles.menuItem, styles.menuDangerItem]} onPress={handleMenuSignOut}>
+            <Pressable style={[styles.menuItem, styles.menuDangerItem]} onPress={() => closeMenu(finalizeSignOut)}>
               <Ionicons name="log-out-outline" size={22} color="#ef4444" />
               <Text style={[styles.menuItemText, { color: "#ef4444" }]}>Log out</Text>
             </Pressable>
-          </View>
-        </Pressable>
+          </Animated.View>
+        </View>
       </Modal>
 
       <Modal
@@ -713,10 +792,6 @@ export default function RootTabs({ onSignOut, user }) {
             ) : null}
           </View>
 
-          <Pressable style={styles.profileSignOutButton} onPress={handleMenuSignOut}>
-            <Ionicons name="log-out-outline" size={20} color="#ffffff" />
-            <Text style={styles.profileSignOutText}>Log out</Text>
-          </Pressable>
         </ScrollView>
       </Modal>
 
@@ -819,9 +894,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  menuModalLayer: {
+    flex: 1,
+  },
   menuBackdrop: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.18)",
+  },
+  menuBackdropFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.18)",
+  },
+  menuDismissLayer: {
+    ...StyleSheet.absoluteFillObject,
   },
   menuCard: {
     position: "absolute",
@@ -994,21 +1079,6 @@ const styles = StyleSheet.create({
   profileDetailValue: {
     fontSize: 16,
     fontWeight: "800",
-  },
-  profileSignOutButton: {
-    minHeight: 54,
-    borderRadius: 18,
-    backgroundColor: "#ef4444",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 18,
-  },
-  profileSignOutText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "900",
   },
   barangayPickerCard: {
     marginHorizontal: 20,
