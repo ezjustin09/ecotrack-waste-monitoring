@@ -58,6 +58,20 @@ function looksLikeUrl(value) {
   return /^https?:\/\//i.test(String(value || "").trim());
 }
 
+function looksLikeHost(value) {
+  const host = String(value || "").trim();
+
+  if (!host) {
+    return false;
+  }
+
+  return !/[\/\s]/.test(host);
+}
+
+function looksLikeEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
 function looksLikeMongoUri(value) {
   return /^mongodb(\+srv)?:\/\//i.test(String(value || "").trim());
 }
@@ -114,6 +128,28 @@ function main() {
     failures.push("ADMIN_PASSWORD_HASH is missing or invalid");
   }
 
+  const adminEmail = firstNonEmpty([backendEnv.ADMIN_EMAIL]);
+  if (!looksLikeEmail(adminEmail) || isPlaceholder(adminEmail)) {
+    failures.push("ADMIN_EMAIL is missing or invalid");
+  }
+
+  const hasResendConfig =
+    Boolean(firstNonEmpty([backendEnv.RESEND_API_KEY])) &&
+    Boolean(firstNonEmpty([backendEnv.RESEND_FROM])) &&
+    !isPlaceholder(firstNonEmpty([backendEnv.RESEND_API_KEY])) &&
+    !isPlaceholder(firstNonEmpty([backendEnv.RESEND_FROM]));
+  const hasSmtpConfig =
+    Boolean(firstNonEmpty([backendEnv.SMTP_USER])) &&
+    Boolean(firstNonEmpty([backendEnv.SMTP_PASS])) &&
+    Boolean(firstNonEmpty([backendEnv.SMTP_FROM])) &&
+    !isPlaceholder(firstNonEmpty([backendEnv.SMTP_USER])) &&
+    !isPlaceholder(firstNonEmpty([backendEnv.SMTP_PASS])) &&
+    !isPlaceholder(firstNonEmpty([backendEnv.SMTP_FROM]));
+
+  if (!hasResendConfig && !hasSmtpConfig) {
+    failures.push("Configure RESEND_API_KEY/RESEND_FROM or SMTP_USER/SMTP_PASS/SMTP_FROM for admin OTP emails");
+  }
+
   const corsOrigins = splitList(firstNonEmpty([backendEnv.CORS_ALLOWED_ORIGINS]));
   if (!corsOrigins.length) {
     failures.push("CORS_ALLOWED_ORIGINS is missing");
@@ -149,15 +185,21 @@ function main() {
     failures.push("One or more EXPO_PUBLIC_GOOGLE_*_CLIENT_ID values are missing or invalid");
   }
 
+  const apiUrl = firstNonEmpty([mobileEnv.EXPO_PUBLIC_API_URL]);
   const apiHost = firstNonEmpty([mobileEnv.EXPO_PUBLIC_API_HOST]);
-  if (!apiHost || isPlaceholder(apiHost)) {
-    failures.push("EXPO_PUBLIC_API_HOST is missing");
+  const hasValidApiUrl = looksLikeUrl(apiUrl) && !isPlaceholder(apiUrl);
+  const hasValidApiHost = looksLikeHost(apiHost) && !isPlaceholder(apiHost);
+
+  if (!hasValidApiUrl && !hasValidApiHost) {
+    failures.push("Set EXPO_PUBLIC_API_URL for hosted deployments or EXPO_PUBLIC_API_HOST for LAN deployments");
   }
 
   console.log("\nWaste Monitoring Deployment Preflight\n");
   logResult(nodeEnv === "production", "NODE_ENV", `value: ${nodeEnv}`);
   logResult(looksLikeMongoUri(mongodbUri) && !isPlaceholder(mongodbUri), "Backend MONGODB_URI");
   logResult(looksLikeHash(adminPasswordHash) && !isPlaceholder(adminPasswordHash), "Backend ADMIN_PASSWORD_HASH");
+  logResult(looksLikeEmail(adminEmail) && !isPlaceholder(adminEmail), "Backend ADMIN_EMAIL", `value: ${adminEmail || "(empty)"}`);
+  logResult(hasResendConfig || hasSmtpConfig, "Backend admin OTP email delivery");
   logResult(
     corsOrigins.length > 0 &&
       corsOrigins.every((origin) => looksLikeUrl(origin)) &&
@@ -167,7 +209,11 @@ function main() {
   logResult(looksLikeApiKey(androidMapsKey) && !isPlaceholder(androidMapsKey), "Mobile GOOGLE_MAPS_ANDROID_API_KEY");
   logResult(looksLikeApiKey(iosMapsKey) && !isPlaceholder(iosMapsKey), "Mobile GOOGLE_MAPS_IOS_API_KEY");
   logResult(googleClientIds.every((value) => looksLikeGoogleClientId(value) && !isPlaceholder(value)), "Mobile Google OAuth client IDs");
-  logResult(Boolean(apiHost) && !isPlaceholder(apiHost), "Mobile EXPO_PUBLIC_API_HOST", `value: ${apiHost || "(empty)"}`);
+  logResult(
+    hasValidApiUrl || hasValidApiHost,
+    "Mobile API endpoint",
+    `EXPO_PUBLIC_API_URL=${apiUrl || "(empty)"} | EXPO_PUBLIC_API_HOST=${apiHost || "(empty)"}`
+  );
 
   if (failures.length > 0) {
     console.error("\nDeployment preflight failed:\n");

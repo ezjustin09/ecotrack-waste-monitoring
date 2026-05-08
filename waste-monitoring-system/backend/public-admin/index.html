@@ -15,28 +15,50 @@
         </div>
 
         <form id="adminLoginForm" class="auth-form" autocomplete="off">
-          <label for="adminUsername">Username</label>
-          <input id="adminUsername" name="username" type="text" placeholder="Enter your username" required />
+          <div id="credentialsStep" class="auth-step">
+            <label for="adminUsername">Username</label>
+            <input id="adminUsername" name="username" type="text" placeholder="Enter your username" required />
 
-          <label for="adminPassword">Password</label>
-          <div class="password-field">
-            <input id="adminPassword" name="password" type="password" placeholder="Enter your password" required />
-            <button
-              id="toggleAdminPassword"
-              class="password-toggle"
-              type="button"
-              aria-label="Show password"
-              aria-pressed="false"
-            >
-              <span aria-hidden="true">&#128065;</span>
-            </button>
+            <label for="adminPassword">Password</label>
+            <div class="password-field">
+              <input id="adminPassword" name="password" type="password" placeholder="Enter your password" required />
+              <button
+                id="toggleAdminPassword"
+                class="password-toggle"
+                type="button"
+                aria-label="Show password"
+                aria-pressed="false"
+              >
+                <span aria-hidden="true">&#128065;</span>
+              </button>
+            </div>
+
+            <div class="auth-row">
+              <label class="remember">
+                <input id="rememberMe" type="checkbox" />
+                <span>Remember me</span>
+              </label>
+            </div>
           </div>
 
-          <div class="auth-row">
-            <label class="remember">
-              <input id="rememberMe" type="checkbox" />
-              <span>Remember me</span>
-            </label>
+          <div id="verificationStep" class="auth-step hidden">
+            <p id="authInfo" class="auth-info"></p>
+
+            <label for="adminVerificationCode">Verification Code</label>
+            <input
+              id="adminVerificationCode"
+              name="verificationCode"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              placeholder="Enter 6-digit code"
+            />
+
+            <div class="auth-actions">
+              <button id="resendVerificationCode" type="button" class="secondary-auth-button">Resend Code</button>
+              <button id="restartAdminLogin" type="button" class="secondary-auth-button">Back</button>
+            </div>
           </div>
 
           <p id="authError" class="auth-error"></p>

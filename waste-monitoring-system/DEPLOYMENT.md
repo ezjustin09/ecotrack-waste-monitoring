@@ -13,8 +13,10 @@ Required values:
 - `NODE_ENV=production`
 - `MONGODB_URI`
 - `MONGODB_DB`
+- `ADMIN_EMAIL`
 - `ADMIN_PASSWORD_HASH`
 - `CORS_ALLOWED_ORIGINS`
+- `RESEND_API_KEY` and `RESEND_FROM`, or `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`
 
 Generate admin hash:
 
@@ -25,18 +27,25 @@ node scripts/hash-password.js "YourStrongAdminPassword"
 
 Copy the printed hash into `ADMIN_PASSWORD_HASH`.
 
+Admin login now requires an email verification code on every sign-in, so `ADMIN_EMAIL` and a working outbound mail configuration are required in production.
+
 ### Mobile env (`mobile/.env`)
 
 Use [mobile/.env.production.example](./mobile/.env.production.example) as template.
 
 Required values:
 
-- `EXPO_PUBLIC_API_HOST`
+- `EXPO_PUBLIC_API_URL` for hosted backends such as Render
 - `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
 - `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
 - `GOOGLE_MAPS_ANDROID_API_KEY`
 - `GOOGLE_MAPS_IOS_API_KEY`
+
+Notes:
+
+- Use `EXPO_PUBLIC_API_URL=https://your-service.onrender.com` for production.
+- `EXPO_PUBLIC_API_HOST` is still supported as a fallback for local LAN testing only.
 
 ## 2) Run deployment preflight
 
@@ -101,7 +110,7 @@ If keys were previously committed, rotate them immediately.
 ## 6) Optional post-deploy smoke checks
 
 - Backend health endpoint returns 200: `GET /health`
-- Admin login works with hashed admin password
+- Admin login works with hashed admin password and emailed OTP
 - Mobile login works (email + Google)
 - Live truck updates appear on map
 - Report submission works with image upload

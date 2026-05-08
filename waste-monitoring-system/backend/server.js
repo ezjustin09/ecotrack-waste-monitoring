@@ -69,14 +69,18 @@ const USER_ROLES = {
 const BLOCKED_TRUCK_IDS = new Set(["TRUCK-001"]);
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
+const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 const ADMIN_PASSWORD = !IS_PRODUCTION ? process.env.ADMIN_PASSWORD || "admin123" : String(process.env.ADMIN_PASSWORD || "").trim();
 const ADMIN_PASSWORD_HASH = String(process.env.ADMIN_PASSWORD_HASH || "").trim();
 const USER_SESSION_TTL_MS = Number(process.env.USER_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000);
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_TTL_MS || 12 * 60 * 60 * 1000);
+const ADMIN_LOGIN_CODE_TTL_MS = Number(process.env.ADMIN_LOGIN_CODE_TTL_MS || 10 * 60 * 1000);
+const ADMIN_LOGIN_CODE_MAX_ATTEMPTS = Number(process.env.ADMIN_LOGIN_CODE_MAX_ATTEMPTS || 5);
 const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
 const REQUEST_BODY_LIMIT = String(process.env.REQUEST_BODY_LIMIT || "12mb").trim() || "12mb";
 const PROFILE_IMAGE_MAX_LENGTH = 3 * 1024 * 1024;
 const INCLUDE_RESET_CODE_IN_RESPONSE = process.env.NODE_ENV !== "production";
+const INCLUDE_ADMIN_LOGIN_CODE_IN_RESPONSE = process.env.NODE_ENV !== "production";
 const RESEND_API_URL = String(process.env.RESEND_API_URL || "https://api.resend.com/emails").trim() || "https://api.resend.com/emails";
 const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
 const RESEND_FROM = String(process.env.RESEND_FROM || "").trim();
@@ -247,6 +251,7 @@ let tripTicketsCollection;
 let countersCollection;
 let userSessionsCollection;
 let adminSessionsCollection;
+let adminLoginChallengesCollection;
 let passwordResetCodesCollection;
 let mailTransporter = null;
 const pushDiagnostics = {
@@ -1018,8 +1023,12 @@ function validateProductionConfiguration() {
     throw new Error("Set ADMIN_PASSWORD_HASH before starting in production.");
   }
 
+  if (!ADMIN_EMAIL) {
+    throw new Error("Set ADMIN_EMAIL before starting in production.");
+  }
+
   if (!isEmailSendingConfigured()) {
-    console.warn("[mail] Forgot-password email is not configured. Set RESEND_API_KEY and RESEND_FROM, or SMTP_USER/SMTP_PASS/SMTP_FROM.");
+    throw new Error("Admin email verification requires RESEND_API_KEY/RESEND_FROM or SMTP_USER/SMTP_PASS/SMTP_FROM in production.");
   }
 }
 
@@ -1260,6 +1269,77 @@ async function clearAdminSession(token) {
   }
 
   await adminSessionsCollection.deleteOne({ token });
+}
+
+function isAdminLoginOtpConfigured() {
+  if (IS_PRODUCTION) {
+    return Boolean(ADMIN_EMAIL) && isEmailSendingConfigured();
+  }
+
+  return (Boolean(ADMIN_EMAIL) && isEmailSendingConfigured()) || INCLUDE_ADMIN_LOGIN_CODE_IN_RESPONSE;
+}
+
+async function deleteAdminLoginChallengeByToken(token) {
+  if (!token) {
+    return;
+  }
+
+  await adminLoginChallengesCollection.deleteOne({ token });
+}
+
+async function clearAdminLoginChallenges(username) {
+  if (!username) {
+    return;
+  }
+
+  await adminLoginChallengesCollection.deleteMany({ username });
+}
+
+async function findActiveAdminLoginChallenge(token) {
+  if (!token) {
+    return null;
+  }
+
+  return adminLoginChallengesCollection.findOne({
+    token,
+    expiresAt: { $gt: new Date() },
+  });
+}
+
+async function createAdminLoginChallenge(username) {
+  const createdAt = new Date();
+  const expiresAt = createExpiryDate(ADMIN_LOGIN_CODE_TTL_MS);
+  const loginCode = generateOneTimeCode();
+
+  await clearAdminLoginChallenges(username);
+
+  const challengeToken = await insertUniqueTokenRecord(adminLoginChallengesCollection, {
+    username,
+    codeHash: hashOneTimeCode(loginCode),
+    attempts: 0,
+    createdAt,
+    expiresAt,
+  });
+
+  try {
+    if (ADMIN_EMAIL && isEmailSendingConfigured()) {
+      await sendAdminLoginCodeEmail(ADMIN_EMAIL, loginCode);
+    } else if (INCLUDE_ADMIN_LOGIN_CODE_IN_RESPONSE) {
+      console.log(`[auth] Admin login verification code for ${username}: ${loginCode}`);
+    } else {
+      throw new Error("Admin email verification is not configured on the server.");
+    }
+  } catch (error) {
+    await deleteAdminLoginChallengeByToken(challengeToken);
+    throw error;
+  }
+
+  return {
+    challengeToken,
+    destination: getAdminOtpDestinationLabel(),
+    expiresAt: expiresAt.toISOString(),
+    ...(INCLUDE_ADMIN_LOGIN_CODE_IN_RESPONSE ? { developmentCode: loginCode } : {}),
+  };
 }
 
 async function storePasswordResetCode(email, userId, code) {
@@ -2140,6 +2220,53 @@ function getConfiguredEmailProviderLabel() {
   return "";
 }
 
+function maskEmailAddress(email) {
+  const normalizedEmail = String(email || "").trim();
+  const atIndex = normalizedEmail.indexOf("@");
+
+  if (atIndex <= 0) {
+    return normalizedEmail || "configured admin inbox";
+  }
+
+  const localPart = normalizedEmail.slice(0, atIndex);
+  const domainPart = normalizedEmail.slice(atIndex + 1);
+
+  if (!domainPart) {
+    return normalizedEmail;
+  }
+
+  const visibleLocal = localPart.length <= 2 ? localPart.charAt(0) : localPart.slice(0, 2);
+  return `${visibleLocal}${"*".repeat(Math.max(localPart.length - visibleLocal.length, 1))}@${domainPart}`;
+}
+
+function generateOneTimeCode(length = 6) {
+  const digits = Array.from({ length }, () => String(Math.floor(Math.random() * 10)));
+  return digits.join("");
+}
+
+function hashOneTimeCode(code) {
+  return crypto.createHash("sha256").update(String(code || "")).digest("hex");
+}
+
+function verifyOneTimeCode(candidateCode, storedHash) {
+  const candidateHashBuffer = Buffer.from(hashOneTimeCode(candidateCode), "hex");
+  const storedHashBuffer = Buffer.from(String(storedHash || ""), "hex");
+
+  if (candidateHashBuffer.length !== storedHashBuffer.length || candidateHashBuffer.length === 0) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(candidateHashBuffer, storedHashBuffer);
+}
+
+function getAdminOtpDestinationLabel() {
+  if (ADMIN_EMAIL && isEmailSendingConfigured()) {
+    return maskEmailAddress(ADMIN_EMAIL);
+  }
+
+  return "local development response";
+}
+
 function buildPasswordResetEmailText(resetCode) {
   return [
     "EcoTrack password reset",
@@ -2168,9 +2295,13 @@ function buildPasswordResetEmailHtml(resetCode) {
   );
 }
 
-async function sendPasswordResetCodeEmail(email, resetCode) {
+async function sendTransactionalEmail({ to, subject, text, html }) {
+  if (!to) {
+    throw new Error("Email destination is required.");
+  }
+
   if (!isEmailSendingConfigured()) {
-    throw new Error("Forgot-password email delivery is not configured.");
+    throw new Error("Email delivery is not configured.");
   }
 
   if (RESEND_EMAIL_ENABLED) {
@@ -2186,10 +2317,10 @@ async function sendPasswordResetCodeEmail(email, resetCode) {
       },
       body: JSON.stringify({
         from: fromValue,
-        to: [email],
-        subject: "EcoTrack password reset code",
-        text: buildPasswordResetEmailText(resetCode),
-        html: buildPasswordResetEmailHtml(resetCode),
+        to: [to],
+        subject,
+        text,
+        html,
         ...(RESEND_REPLY_TO ? { reply_to: RESEND_REPLY_TO } : {}),
       }),
     });
@@ -2223,10 +2354,56 @@ async function sendPasswordResetCodeEmail(email, resetCode) {
       name: SMTP_FROM_NAME,
       address: SMTP_FROM,
     },
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
+async function sendPasswordResetCodeEmail(email, resetCode) {
+  await sendTransactionalEmail({
     to: email,
     subject: "EcoTrack password reset code",
     text: buildPasswordResetEmailText(resetCode),
     html: buildPasswordResetEmailHtml(resetCode),
+  });
+}
+
+function buildAdminLoginCodeEmailText(loginCode) {
+  return [
+    "EcoTrack admin login verification",
+    "",
+    "Use this one-time verification code to finish the admin sign-in:",
+    String(loginCode || ""),
+    "",
+    "The code expires in 10 minutes.",
+    "If you did not try to sign in as admin, change the admin password immediately.",
+  ].join("\n");
+}
+
+function buildAdminLoginCodeEmailHtml(loginCode) {
+  const safeCode = String(loginCode || "").replace(/[^0-9A-Za-z]/g, "");
+
+  return (
+    "<div style=\"font-family:Arial,sans-serif;color:#0f172a;line-height:1.5;\">" +
+    "<h2 style=\"margin:0 0 12px;\">EcoTrack admin login verification</h2>" +
+    "<p style=\"margin:0 0 12px;\">Use this one-time verification code to finish the admin sign-in:</p>" +
+    "<p style=\"font-size:28px;letter-spacing:4px;font-weight:700;margin:0 0 12px;color:#0f766e;\">" +
+    safeCode +
+    "</p>" +
+    "<p style=\"margin:0 0 8px;\">The code expires in 10 minutes.</p>" +
+    "<p style=\"margin:0;\">If you did not try to sign in as admin, change the admin password immediately.</p>" +
+    "</div>"
+  );
+}
+
+async function sendAdminLoginCodeEmail(email, loginCode) {
+  await sendTransactionalEmail({
+    to: email,
+    subject: "EcoTrack admin verification code",
+    text: buildAdminLoginCodeEmailText(loginCode),
+    html: buildAdminLoginCodeEmailHtml(loginCode),
   });
 }
 
@@ -2841,6 +3018,7 @@ async function connectDatabase() {
   countersCollection = database.collection("counters");
   userSessionsCollection = database.collection("sessions");
   adminSessionsCollection = database.collection("admin_sessions");
+  adminLoginChallengesCollection = database.collection("admin_login_challenges");
   passwordResetCodesCollection = database.collection("password_reset_codes");
 
   await Promise.all([
@@ -2864,6 +3042,9 @@ async function connectDatabase() {
     userSessionsCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     adminSessionsCollection.createIndex({ token: 1 }, { unique: true }),
     adminSessionsCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    adminLoginChallengesCollection.createIndex({ token: 1 }, { unique: true }),
+    adminLoginChallengesCollection.createIndex({ username: 1 }),
+    adminLoginChallengesCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     passwordResetCodesCollection.createIndex({ email: 1 }, { unique: true }),
     passwordResetCodesCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
@@ -2955,6 +3136,8 @@ app.get("/", (req, res) => {
       "POST /auth/change-password",
       "POST /driver/live-sharing/start",
       "POST /driver/live-sharing/stop",
+      "POST /admin/auth/verify-login",
+      "POST /admin/auth/resend-code",
       "PUT /users/profile-picture",
       "POST /users/push-token",
       "POST /users/push-token/remove",
@@ -3016,6 +3199,13 @@ app.post("/admin/auth/login", asyncRoute(async (req, res) => {
     return;
   }
 
+  if (!isAdminLoginOtpConfigured()) {
+    res.status(503).json({
+      error: "Admin email verification is not configured on the server.",
+    });
+    return;
+  }
+
   const passwordMatches = username === ADMIN_USER ? await verifyAdminPassword(password) : false;
   if (!passwordMatches) {
     res.status(401).json({
@@ -3024,11 +3214,111 @@ app.post("/admin/auth/login", asyncRoute(async (req, res) => {
     return;
   }
 
-  const session = await createAdminSession(username);
+  const challenge = await createAdminLoginChallenge(username);
+
+  res.status(202).json({
+    message: "Verification code sent.",
+    requiresVerification: true,
+    ...challenge,
+  });
+}));
+
+app.post("/admin/auth/verify-login", asyncRoute(async (req, res) => {
+  const challengeToken = String(req.body?.challengeToken || "").trim();
+  const verificationCode = String(req.body?.code || "").replace(/\s+/g, "");
+
+  if (!challengeToken || !verificationCode) {
+    res.status(400).json({
+      error: "challengeToken and code are required",
+    });
+    return;
+  }
+
+  const challenge = await findActiveAdminLoginChallenge(challengeToken);
+
+  if (!challenge) {
+    res.status(401).json({
+      error: "Verification code expired or invalid. Request a new code.",
+    });
+    return;
+  }
+
+  if (Number(challenge.attempts || 0) >= ADMIN_LOGIN_CODE_MAX_ATTEMPTS) {
+    await clearAdminLoginChallenges(challenge.username);
+    res.status(401).json({
+      error: "Too many invalid verification attempts. Request a new code.",
+    });
+    return;
+  }
+
+  if (!verifyOneTimeCode(verificationCode, challenge.codeHash)) {
+    const nextAttempts = Number(challenge.attempts || 0) + 1;
+
+    if (nextAttempts >= ADMIN_LOGIN_CODE_MAX_ATTEMPTS) {
+      await clearAdminLoginChallenges(challenge.username);
+      res.status(401).json({
+        error: "Too many invalid verification attempts. Request a new code.",
+      });
+      return;
+    }
+
+    await adminLoginChallengesCollection.updateOne(
+      { token: challengeToken },
+      {
+        $set: {
+          attempts: nextAttempts,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    res.status(401).json({
+      error: "Invalid verification code",
+    });
+    return;
+  }
+
+  await clearAdminLoginChallenges(challenge.username);
+  const session = await createAdminSession(challenge.username);
 
   res.status(200).json({
     message: "Admin login successful.",
     ...session,
+  });
+}));
+
+app.post("/admin/auth/resend-code", asyncRoute(async (req, res) => {
+  const challengeToken = String(req.body?.challengeToken || "").trim();
+
+  if (!challengeToken) {
+    res.status(400).json({
+      error: "challengeToken is required",
+    });
+    return;
+  }
+
+  if (!isAdminLoginOtpConfigured()) {
+    res.status(503).json({
+      error: "Admin email verification is not configured on the server.",
+    });
+    return;
+  }
+
+  const challenge = await findActiveAdminLoginChallenge(challengeToken);
+
+  if (!challenge) {
+    res.status(401).json({
+      error: "Verification code expired or invalid. Sign in again.",
+    });
+    return;
+  }
+
+  const nextChallenge = await createAdminLoginChallenge(challenge.username);
+
+  res.status(202).json({
+    message: "Verification code sent.",
+    requiresVerification: true,
+    ...nextChallenge,
   });
 }));
 
