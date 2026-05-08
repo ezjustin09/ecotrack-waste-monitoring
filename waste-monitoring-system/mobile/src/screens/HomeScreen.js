@@ -119,7 +119,7 @@ function removeFeedItem(currentItems, itemId) {
 }
 
 export default function HomeScreen() {
-  const { token, signOut } = useAuth();
+  const { token, user, signOut } = useAuth();
   const { colors, isDarkMode } = usePreferences();
   const [trucks, setTrucks] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -127,6 +127,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const designatedBarangay = String(user?.barangay || "").trim();
 
   const fleetSummary = useMemo(
     () => ({
@@ -176,14 +177,16 @@ export default function HomeScreen() {
   useEffect(() => {
     loadHomeData();
 
-    const socket = createTruckSocket();
+    const socket = createTruckSocket(token);
 
     socket.on("connect", () => {
       setErrorMessage("");
     });
 
     socket.on("connect_error", (error) => {
-      setErrorMessage(error.message);
+      if (!handleAuthError(error.message)) {
+        setErrorMessage(error.message);
+      }
     });
 
     socket.on("trucks:snapshot", (snapshot) => {
@@ -234,7 +237,7 @@ export default function HomeScreen() {
     return () => {
       socket.disconnect();
     };
-  }, [token]);
+  }, [designatedBarangay, token]);
 
   return (
     <ScrollView
@@ -274,6 +277,11 @@ export default function HomeScreen() {
 
       {errorMessage ? (
         <Text style={[styles.errorBanner, { backgroundColor: colors.dangerSoft, color: colors.danger }]}>{errorMessage}</Text>
+      ) : null}
+      {!errorMessage && !designatedBarangay ? (
+        <Text style={[styles.errorBanner, { backgroundColor: colors.overlay, color: colors.primary }]}>
+          Set your designated barangay in Profile to receive live truck updates.
+        </Text>
       ) : null}
 
       <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>

@@ -2217,11 +2217,15 @@ function handleLogout(sendRequest = true) {
 }
 
 function setupRealtime() {
-  if (!window.io) {
+  if (!window.io || !state.token) {
     return;
   }
 
-  const socket = window.io();
+  const socket = window.io({
+    auth: {
+      token: state.token,
+    },
+  });
   const refresh = () => refreshCurrentPageData();
 
   socket.on("truck:updated", refresh);

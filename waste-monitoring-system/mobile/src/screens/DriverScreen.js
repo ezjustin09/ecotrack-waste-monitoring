@@ -154,7 +154,7 @@ export default function DriverScreen() {
   }, [status]);
 
   useEffect(() => {
-    const socket = createTruckSocket();
+    const socket = createTruckSocket(token);
     socketRef.current = socket;
 
     socket.on("connect", () => {
@@ -168,14 +168,16 @@ export default function DriverScreen() {
 
     socket.on("connect_error", (error) => {
       setConnectionLabel("Offline");
-      setErrorMessage(error.message);
+      if (!handleAuthError(error.message)) {
+        setErrorMessage(error.message);
+      }
     });
 
     return () => {
       locationSubscriptionRef.current?.remove();
       socket.disconnect();
     };
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     if (!sharing || !currentLocation) {

@@ -249,7 +249,7 @@ function AppShell() {
       return;
     }
 
-    const socket = createTruckSocket();
+    const socket = createTruckSocket(authValue.token);
 
     socket.on("announcement:created", (announcement) => {
       sendFeedNotificationAsync("announcement", announcement).catch(() => {});
@@ -262,7 +262,7 @@ function AppShell() {
     return () => {
       socket.disconnect();
     };
-  }, [authValue.isAuthenticated, feedNotificationsEnabled]);
+  }, [authValue.isAuthenticated, authValue.token, feedNotificationsEnabled]);
 
   const navigationTheme = useMemo(() => buildNavigationTheme(isDarkMode), [isDarkMode]);
 
