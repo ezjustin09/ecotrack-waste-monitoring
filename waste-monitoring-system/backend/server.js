@@ -902,6 +902,10 @@ function normalizeTruckId(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function parseCoordinate(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -1051,20 +1055,33 @@ async function findDriverTripTicketForSharing({ truckId, driverName = "", occurr
     return null;
   }
 
-  const rows = await tripTicketsCollection
+  const normalizedDriverName = String(driverName || "").trim().toLowerCase();
+
+  let rows = await tripTicketsCollection
     .find({
       truckId,
-      status: { $in: ["Scheduled", "On Route"] },
     })
     .sort({ departureAt: -1, updatedAt: -1, createdAt: -1 })
     .limit(25)
     .toArray();
 
+  if (!rows.length && normalizedDriverName) {
+    rows = await tripTicketsCollection
+      .find({
+        driverName: {
+          $regex: `^${escapeRegExp(driverName)}$`,
+          $options: "i",
+        },
+      })
+      .sort({ departureAt: -1, updatedAt: -1, createdAt: -1 })
+      .limit(25)
+      .toArray();
+  }
+
   if (!rows.length) {
     return null;
   }
 
-  const normalizedDriverName = String(driverName || "").trim().toLowerCase();
   const matchingDriverRows = normalizedDriverName
     ? rows.filter((ticket) => String(ticket.driverName || "").trim().toLowerCase() === normalizedDriverName)
     : [];
@@ -1073,6 +1090,13 @@ async function findDriverTripTicketForSharing({ truckId, driverName = "", occurr
   const occurredAtDateKey = getDateKeyInTimeZone(occurredAt);
 
   return [...candidates].sort((first, second) => {
+    const firstTruckRank = String(first.truckId || "").trim().toUpperCase() === truckId ? 0 : 1;
+    const secondTruckRank = String(second.truckId || "").trim().toUpperCase() === truckId ? 0 : 1;
+
+    if (firstTruckRank !== secondTruckRank) {
+      return firstTruckRank - secondTruckRank;
+    }
+
     const firstDateKey = getDateKeyInTimeZone(first.departureAt || first.createdAt);
     const secondDateKey = getDateKeyInTimeZone(second.departureAt || second.createdAt);
     const firstSameDayRank = firstDateKey === occurredAtDateKey ? 0 : 1;
@@ -1156,6 +1180,10 @@ async function syncDriverTripTicketSharing({
   };
   const parsedDepartureAt = new Date(targetTripTicket.departureAt || 0);
   const hasValidDepartureAt = Number.isFinite(parsedDepartureAt.getTime());
+
+  if (String(targetTripTicket.truckId || "").trim().toUpperCase() !== truckId) {
+    nextFields.truckId = truckId;
+  }
 
   if (driverName) {
     nextFields.driverName = driverName;
