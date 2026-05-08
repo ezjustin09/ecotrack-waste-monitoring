@@ -209,6 +209,16 @@ export async function changePassword(payload, token) {
   return parseJsonResponse(response);
 }
 
+export async function updateProfilePicture(avatarUrl, token) {
+  const response = await fetch(`${API_BASE_URL}/users/profile-picture`, {
+    method: "PUT",
+    headers: buildHeaders(token),
+    body: JSON.stringify({ avatarUrl }),
+  });
+
+  return parseJsonResponse(response);
+}
+
 export async function registerPushToken(pushToken, token, platform = Platform.OS) {
   const response = await fetch(`${API_BASE_URL}/users/push-token`, {
     method: "POST",

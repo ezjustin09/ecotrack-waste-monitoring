@@ -1,5 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,9 +21,57 @@ import DriverScreen from "../screens/DriverScreen";
 import ReportScreen from "../screens/ReportScreen";
 import ScheduleScreen from "../screens/ScheduleScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import { useAuth } from "../context/AuthContext";
 import { usePreferences } from "../context/PreferencesContext";
+import { updateProfilePicture } from "../services/api";
 
 const Tab = createBottomTabNavigator();
+const PROFILE_IMAGE_STORAGE_PREFIX = "ecotrack:profile-image:";
+const PROFILE_IMAGE_MAX_LENGTH = 3 * 1024 * 1024;
+let AsyncStorageModule = null;
+let ImagePickerModule = null;
+
+try {
+  // Keep the app usable if an old development binary does not include these native modules yet.
+  // eslint-disable-next-line global-require
+  AsyncStorageModule = require("@react-native-async-storage/async-storage").default;
+} catch (error) {
+  AsyncStorageModule = null;
+}
+
+try {
+  // eslint-disable-next-line global-require
+  ImagePickerModule = require("expo-image-picker");
+} catch (error) {
+  ImagePickerModule = null;
+}
+
+function toDataUriFromBase64(base64Payload, mimeType = "image/jpeg") {
+  const normalizedBase64 = String(base64Payload || "").trim();
+
+  if (!normalizedBase64) {
+    return "";
+  }
+
+  const safeMimeType = String(mimeType || "image/jpeg").trim() || "image/jpeg";
+  return `data:${safeMimeType};base64,${normalizedBase64}`;
+}
+
+function readFileUriAsDataUri(fileUri) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+      const reader = new FileReader();
+
+      reader.onerror = () => reject(new Error("Unable to read the selected image."));
+      reader.onloadend = () => resolve(String(reader.result || ""));
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
 
 const iconMap = {
   Home: "home",
@@ -228,16 +288,52 @@ function AnimatedTabBar({ state, descriptors, navigation, colors, isDarkMode, ta
 
 export default function RootTabs({ onSignOut, user }) {
   const insets = useSafeAreaInsets();
+  const { token, setSession } = useAuth();
   const { colors, isDarkMode } = usePreferences();
   const isDriver = user?.role === "driver";
   const tabBarBottomPadding = Math.max(insets.bottom, 10);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const [isProfileVisible, setIsProfileVisible] = useState(false);
+  const [profileImageUri, setProfileImageUri] = useState("");
+  const [isUpdatingProfileImage, setIsUpdatingProfileImage] = useState(false);
   const displayName = String(user?.name || user?.email || "Resident User").trim();
   const displayEmail = String(user?.email || "No email available").trim();
   const profileInitial = displayName.charAt(0).toUpperCase() || "R";
   const roleLabel = isDriver ? "Driver" : "Resident";
+  const profileStorageKey = `${PROFILE_IMAGE_STORAGE_PREFIX}${user?.id || user?.email || "guest"}`;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadProfileImage() {
+      const fallbackAvatar = String(user?.avatarUrl || "").trim();
+
+      if (!AsyncStorageModule?.getItem) {
+        if (isMounted) {
+          setProfileImageUri(fallbackAvatar);
+        }
+        return;
+      }
+
+      try {
+        const savedUri = await AsyncStorageModule.getItem(profileStorageKey);
+        if (isMounted) {
+          setProfileImageUri(savedUri || fallbackAvatar);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setProfileImageUri(fallbackAvatar);
+        }
+      }
+    }
+
+    loadProfileImage();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profileStorageKey, user?.avatarUrl]);
 
   function openSettingsFromMenu() {
     setIsMenuVisible(false);
@@ -254,6 +350,94 @@ export default function RootTabs({ onSignOut, user }) {
     setIsProfileVisible(false);
     setIsSettingsVisible(false);
     onSignOut?.();
+  }
+
+  async function handleChangeProfilePicture() {
+    if (!ImagePickerModule) {
+      Alert.alert("Profile photo unavailable", "Image picker is not available in this app build yet.");
+      return;
+    }
+
+    if (isUpdatingProfileImage) {
+      return;
+    }
+
+    setIsUpdatingProfileImage(true);
+
+    try {
+      const permission = await ImagePickerModule.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert("Permission needed", "Please allow photo access so you can choose a profile picture.");
+        return;
+      }
+
+      const result = await ImagePickerModule.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.65,
+        base64: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const selectedAsset = result.assets?.[0] || null;
+      const selectedUri = selectedAsset?.uri || "";
+      const selectedMimeType = selectedAsset?.mimeType || "image/jpeg";
+      const selectedBase64 = selectedAsset?.base64 || "";
+      let nextUri = selectedBase64 ? toDataUriFromBase64(selectedBase64, selectedMimeType) : "";
+
+      if (!nextUri && selectedUri && !selectedUri.toLowerCase().startsWith("http")) {
+        nextUri = await readFileUriAsDataUri(selectedUri);
+      }
+
+      if (!nextUri) {
+        nextUri = selectedUri;
+      }
+
+      if (!nextUri) {
+        Alert.alert("Photo unavailable", "Please choose another image.");
+        return;
+      }
+
+      if (nextUri.length > PROFILE_IMAGE_MAX_LENGTH) {
+        Alert.alert("Photo too large", "Please choose a smaller profile picture.");
+        return;
+      }
+
+      setProfileImageUri(nextUri);
+
+      if (AsyncStorageModule?.setItem) {
+        try {
+          await AsyncStorageModule.setItem(profileStorageKey, nextUri);
+        } catch (storageError) {
+          console.warn("Unable to save profile picture locally:", storageError?.message || storageError);
+        }
+      }
+
+      if (token) {
+        const response = await updateProfilePicture(nextUri, token);
+
+        if (response.user) {
+          setSession({
+            token,
+            user: response.user,
+          });
+        }
+      }
+    } catch (error) {
+      if (error?.message === "Authentication required" || error?.message === "Invalid or expired session") {
+        handleMenuSignOut();
+        return;
+      }
+
+      Alert.alert("Unable to update photo", error?.message || "Please try again.");
+    } finally {
+      setIsUpdatingProfileImage(false);
+    }
   }
 
   return (
@@ -327,7 +511,11 @@ export default function RootTabs({ onSignOut, user }) {
           >
             <View style={styles.menuProfileRow}>
               <View style={[styles.profileAvatarSmall, { backgroundColor: colors.primary }]}>
-                <Text style={styles.profileAvatarTextSmall}>{profileInitial}</Text>
+                {profileImageUri ? (
+                  <Image source={{ uri: profileImageUri }} style={styles.profileAvatarImageSmall} />
+                ) : (
+                  <Text style={styles.profileAvatarTextSmall}>{profileInitial}</Text>
+                )}
               </View>
               <View style={styles.menuProfileText}>
                 <Text style={[styles.menuProfileName, { color: colors.text }]} numberOfLines={1}>
@@ -361,7 +549,7 @@ export default function RootTabs({ onSignOut, user }) {
         presentationStyle="pageSheet"
         onRequestClose={() => setIsProfileVisible(false)}
       >
-        <View
+        <ScrollView
           style={[
             styles.profileModal,
             {
@@ -369,6 +557,7 @@ export default function RootTabs({ onSignOut, user }) {
               paddingTop: Math.max(insets.top, 12),
             },
           ]}
+          contentContainerStyle={styles.profileModalContent}
         >
           <View
             style={[
@@ -391,9 +580,46 @@ export default function RootTabs({ onSignOut, user }) {
           </View>
 
           <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
-            <View style={[styles.profileAvatarLarge, { backgroundColor: colors.primary }]}>
-              <Text style={styles.profileAvatarTextLarge}>{profileInitial}</Text>
-            </View>
+            <Pressable
+              style={[
+                styles.profileAvatarLarge,
+                { backgroundColor: colors.primary },
+                isUpdatingProfileImage && styles.profileImageUpdating,
+              ]}
+              onPress={handleChangeProfilePicture}
+              disabled={isUpdatingProfileImage}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile picture"
+            >
+              {profileImageUri ? (
+                <Image source={{ uri: profileImageUri }} style={styles.profileAvatarImageLarge} />
+              ) : (
+                <Text style={styles.profileAvatarTextLarge}>{profileInitial}</Text>
+              )}
+              <View style={styles.profileAvatarEditBadge}>
+                {isUpdatingProfileImage ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Ionicons name="camera" size={15} color="#ffffff" />
+                )}
+              </View>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.changePhotoButton,
+                { backgroundColor: colors.overlay },
+                isUpdatingProfileImage && styles.profileImageUpdating,
+              ]}
+              onPress={handleChangeProfilePicture}
+              disabled={isUpdatingProfileImage}
+            >
+              {isUpdatingProfileImage ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons name="camera-outline" size={16} color={colors.primary} />
+              )}
+              <Text style={[styles.changePhotoText, { color: colors.primary }]}>Change photo</Text>
+            </Pressable>
             <Text style={[styles.profileName, { color: colors.text }]}>{displayName}</Text>
             <Text style={[styles.profileEmail, { color: colors.textMuted }]}>{displayEmail}</Text>
             <View style={[styles.profileBadge, { backgroundColor: colors.overlay }]}>
@@ -429,7 +655,7 @@ export default function RootTabs({ onSignOut, user }) {
             <Ionicons name="log-out-outline" size={20} color="#ffffff" />
             <Text style={styles.profileSignOutText}>Log out</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </Modal>
 
       <Modal
@@ -515,6 +741,11 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  profileAvatarImageSmall: {
+    width: "100%",
+    height: "100%",
   },
   profileAvatarTextSmall: {
     color: "#ffffff",
@@ -552,6 +783,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 18,
   },
+  profileModalContent: {
+    paddingBottom: 28,
+  },
   profileCard: {
     alignItems: "center",
     borderRadius: 28,
@@ -566,10 +800,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 14,
+    overflow: "hidden",
+  },
+  profileAvatarImageLarge: {
+    width: "100%",
+    height: "100%",
+  },
+  profileImageUpdating: {
+    opacity: 0.72,
+  },
+  profileAvatarEditBadge: {
+    position: "absolute",
+    right: 0,
+    bottom: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#0f766e",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#ffffff",
   },
   profileAvatarTextLarge: {
     color: "#ffffff",
     fontSize: 34,
+    fontWeight: "900",
+  },
+  changePhotoButton: {
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  changePhotoText: {
+    fontSize: 13,
     fontWeight: "900",
   },
   profileName: {

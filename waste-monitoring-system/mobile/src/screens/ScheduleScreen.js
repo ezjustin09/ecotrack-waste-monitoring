@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -23,6 +24,11 @@ const DAY_ORDER = {
 };
 
 const DAY_LABELS = Object.keys(DAY_ORDER);
+const ALL_BARANGAYS_FILTER = "All barangays";
+
+function getScheduleArea(entry) {
+  return String(entry?.barangay || entry?.zone || "").trim();
+}
 
 function sortSchedule(entries) {
   return [...entries].sort((first, second) => {
@@ -33,7 +39,7 @@ function sortSchedule(entries) {
       return firstDay - secondDay;
     }
 
-    return String(first.zone || "").localeCompare(String(second.zone || ""));
+    return getScheduleArea(first).localeCompare(getScheduleArea(second));
   });
 }
 
@@ -135,17 +141,46 @@ export default function ScheduleScreen() {
   const { token, signOut } = useAuth();
   const { colors, isDarkMode } = usePreferences();
   const [schedule, setSchedule] = useState([]);
+  const [selectedBarangay, setSelectedBarangay] = useState(ALL_BARANGAYS_FILTER);
+  const [isBarangayPickerOpen, setIsBarangayPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const sortedSchedule = useMemo(() => sortSchedule(schedule), [schedule]);
+  const barangayOptions = useMemo(() => {
+    const options = Array.from(
+      new Set(schedule.map((entry) => getScheduleArea(entry)).filter(Boolean))
+    ).sort((first, second) => first.localeCompare(second));
+
+    return [ALL_BARANGAYS_FILTER, ...options];
+  }, [schedule]);
+  const barangayScheduleCounts = useMemo(
+    () =>
+      schedule.reduce((counts, entry) => {
+        const area = getScheduleArea(entry);
+
+        if (area) {
+          counts[area] = (counts[area] || 0) + 1;
+        }
+
+        return counts;
+      }, {}),
+    [schedule]
+  );
+  const filteredSchedule = useMemo(() => {
+    if (selectedBarangay === ALL_BARANGAYS_FILTER) {
+      return schedule;
+    }
+
+    return schedule.filter((entry) => getScheduleArea(entry) === selectedBarangay);
+  }, [schedule, selectedBarangay]);
+  const sortedSchedule = useMemo(() => sortSchedule(filteredSchedule), [filteredSchedule]);
   const groupedSchedule = useMemo(() => groupScheduleByDay(sortedSchedule), [sortedSchedule]);
   const nextSchedule = useMemo(() => getNextSchedule(sortedSchedule), [sortedSchedule]);
   const uniqueCoverageCount = useMemo(
     () =>
       new Set(
-        sortedSchedule.map((entry) => String(entry.zone || entry.barangay || "").trim()).filter(Boolean)
+        sortedSchedule.map((entry) => getScheduleArea(entry)).filter(Boolean)
       ).size,
     [sortedSchedule]
   );
@@ -182,6 +217,12 @@ export default function ScheduleScreen() {
   useEffect(() => {
     loadSchedule();
   }, []);
+
+  useEffect(() => {
+    if (!barangayOptions.includes(selectedBarangay)) {
+      setSelectedBarangay(ALL_BARANGAYS_FILTER);
+    }
+  }, [barangayOptions, selectedBarangay]);
 
   return (
     <ScrollView
@@ -226,7 +267,7 @@ export default function ScheduleScreen() {
           </View>
 
           <Text style={[styles.nextPickupZone, { color: colors.textSecondary }]}>
-            {nextSchedule ? nextSchedule.zone || nextSchedule.barangay || "Collection route" : "No route yet"}
+            {nextSchedule ? getScheduleArea(nextSchedule) || "Collection route" : "No route yet"}
           </Text>
 
           <View style={styles.nextPickupMetaRow}>
@@ -293,10 +334,69 @@ export default function ScheduleScreen() {
         <Text style={[styles.errorBanner, { backgroundColor: colors.dangerSoft, color: colors.danger }]}>{errorMessage}</Text>
       ) : null}
 
+      {!loading && !errorMessage && schedule.length > 0 ? (
+        <View style={[styles.filterCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+          <Text style={[styles.filterLabel, { color: colors.textMuted }]}>Barangay</Text>
+          <Pressable
+            style={[
+              styles.filterSelect,
+              {
+                backgroundColor: isDarkMode ? colors.cardMuted : "#f8fafc",
+                borderColor: colors.borderSoft,
+              },
+            ]}
+            onPress={() => setIsBarangayPickerOpen((current) => !current)}
+            accessibilityRole="button"
+            accessibilityLabel="Select barangay schedule"
+          >
+            <Text style={[styles.filterSelectText, { color: colors.text }]}>{selectedBarangay}</Text>
+            <Ionicons name={isBarangayPickerOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.textMuted} />
+          </Pressable>
+
+          {isBarangayPickerOpen ? (
+            <View style={[styles.filterDropdown, { borderColor: colors.borderSoft }]}>
+              {barangayOptions.map((barangay) => {
+                const isSelected = barangay === selectedBarangay;
+                const slotCount =
+                  barangay === ALL_BARANGAYS_FILTER ? schedule.length : barangayScheduleCounts[barangay] || 0;
+
+                return (
+                  <Pressable
+                    key={barangay}
+                    style={[
+                      styles.filterOption,
+                      {
+                        backgroundColor: isSelected ? colors.overlay : "transparent",
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedBarangay(barangay);
+                      setIsBarangayPickerOpen(false);
+                    }}
+                  >
+                    <View style={styles.filterOptionCopy}>
+                      <Text style={[styles.filterOptionText, { color: isSelected ? colors.primary : colors.text }]}>
+                        {barangay}
+                      </Text>
+                      <Text style={[styles.filterOptionMeta, { color: colors.textMuted }]}>
+                        {slotCount} {slotCount === 1 ? "slot" : "slots"}
+                      </Text>
+                    </View>
+                    {isSelected ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       {!loading && !errorMessage && sortedSchedule.length === 0 ? (
         <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
           <Ionicons name="calendar-clear-outline" size={22} color={colors.textMuted} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No schedule yet.</Text>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+            {schedule.length > 0 ? "No schedule for this barangay yet." : "No schedule yet."}
+          </Text>
         </View>
       ) : null}
 
@@ -321,7 +421,7 @@ export default function ScheduleScreen() {
 
                   return (
                     <View
-                      key={entry.id || `${entry.day}-${entry.zone}-${entry.timeWindow}`}
+                      key={entry.id || `${entry.day}-${getScheduleArea(entry)}-${entry.timeWindow}`}
                       style={[
                         styles.scheduleCard,
                         {
@@ -347,7 +447,7 @@ export default function ScheduleScreen() {
                         <View style={styles.cardHeaderRow}>
                           <View style={styles.cardHeaderTextWrap}>
                             <Text style={[styles.zoneTextStrong, { color: colors.text }]}>
-                              {entry.zone || entry.barangay || "Collection route"}
+                              {getScheduleArea(entry) || "Collection route"}
                             </Text>
                           </View>
                           <View style={[styles.typePill, { backgroundColor: tone.backgroundColor }]}>
@@ -528,6 +628,60 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef2f2",
     color: "#b91c1c",
     fontSize: 13,
+  },
+  filterCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 14,
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  filterSelect: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  filterSelectText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  filterDropdown: {
+    borderWidth: 1,
+    borderRadius: 16,
+    marginTop: 10,
+    overflow: "hidden",
+  },
+  filterOption: {
+    minHeight: 46,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  filterOptionCopy: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  filterOptionText: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  filterOptionMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "700",
   },
   emptyCard: {
     marginTop: 6,

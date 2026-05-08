@@ -75,6 +75,7 @@ const USER_SESSION_TTL_MS = Number(process.env.USER_SESSION_TTL_MS || 30 * 24 * 
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_TTL_MS || 12 * 60 * 60 * 1000);
 const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
 const REQUEST_BODY_LIMIT = String(process.env.REQUEST_BODY_LIMIT || "12mb").trim() || "12mb";
+const PROFILE_IMAGE_MAX_LENGTH = 3 * 1024 * 1024;
 const INCLUDE_RESET_CODE_IN_RESPONSE = process.env.NODE_ENV !== "production";
 const RESEND_API_URL = String(process.env.RESEND_API_URL || "https://api.resend.com/emails").trim() || "https://api.resend.com/emails";
 const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
@@ -529,6 +530,7 @@ function sanitizeUser(user) {
     role: user.role,
     truckId: user.truckId || "",
     authProvider: user.authProvider || "local",
+    avatarUrl: user.avatarUrl || "",
     createdAt: toIsoString(user.createdAt),
   };
 }
@@ -2141,6 +2143,37 @@ function normalizeReportPayload(payload = {}) {
   };
 }
 
+function normalizeProfilePicturePayload(payload = {}) {
+  const avatarUrl = String(payload.avatarUrl || payload.pictureUri || payload.profilePictureUri || "").trim();
+  const normalizedAvatarUrl = avatarUrl.toLowerCase();
+
+  if (!avatarUrl) {
+    return {
+      error: "profile picture is required",
+    };
+  }
+
+  if (avatarUrl.length > PROFILE_IMAGE_MAX_LENGTH) {
+    return {
+      error: "Profile picture is too large. Please choose a smaller photo and try again.",
+    };
+  }
+
+  if (
+    !normalizedAvatarUrl.startsWith("data:image/") &&
+    !normalizedAvatarUrl.startsWith("https://") &&
+    !normalizedAvatarUrl.startsWith("http://")
+  ) {
+    return {
+      error: "Please choose a valid profile image.",
+    };
+  }
+
+  return {
+    avatarUrl,
+  };
+}
+
 
 function normalizeDriverPayload(payload = {}, options = {}) {
   const requirePassword = options.requirePassword !== false;
@@ -2767,6 +2800,7 @@ app.get("/", (req, res) => {
       "POST /auth/forgot-password",
       "POST /auth/reset-password",
       "POST /auth/change-password",
+      "PUT /users/profile-picture",
       "POST /users/push-token",
       "POST /users/push-token/remove",
       "POST /users/nearby-alert-location",
@@ -3760,7 +3794,7 @@ app.post(
         updatePayload.googleId = googleProfile.sub;
       }
 
-      if (googleProfile.picture) {
+      if (googleProfile.picture && !String(user.avatarUrl || "").trim()) {
         updatePayload.avatarUrl = googleProfile.picture;
       }
 
@@ -4005,6 +4039,45 @@ app.post(
     res.status(200).json({
       message: "Login successful.",
       ...session,
+    });
+  })
+);
+
+app.put(
+  "/users/profile-picture",
+  authenticateRequest,
+  asyncRoute(async (req, res) => {
+    const payload = normalizeProfilePicturePayload(req.body);
+
+    if (payload.error) {
+      res.status(400).json({
+        error: payload.error,
+      });
+      return;
+    }
+
+    const updateResult = await usersCollection.updateOne(
+      { id: req.user.id },
+      {
+        $set: {
+          avatarUrl: payload.avatarUrl,
+          profileUpdatedAt: new Date(),
+        },
+      }
+    );
+
+    if (!updateResult.matchedCount) {
+      res.status(404).json({
+        error: "Account not found",
+      });
+      return;
+    }
+
+    const user = await findUserById(req.user.id);
+
+    res.status(200).json({
+      message: "Profile picture updated.",
+      user: sanitizeUser(user),
     });
   })
 );
