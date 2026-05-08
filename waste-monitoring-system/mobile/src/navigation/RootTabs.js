@@ -231,7 +231,30 @@ export default function RootTabs({ onSignOut, user }) {
   const { colors, isDarkMode } = usePreferences();
   const isDriver = user?.role === "driver";
   const tabBarBottomPadding = Math.max(insets.bottom, 10);
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
+  const [isProfileVisible, setIsProfileVisible] = useState(false);
+  const displayName = String(user?.name || user?.email || "Resident User").trim();
+  const displayEmail = String(user?.email || "No email available").trim();
+  const profileInitial = displayName.charAt(0).toUpperCase() || "R";
+  const roleLabel = isDriver ? "Driver" : "Resident";
+
+  function openSettingsFromMenu() {
+    setIsMenuVisible(false);
+    setIsSettingsVisible(true);
+  }
+
+  function openProfileFromMenu() {
+    setIsMenuVisible(false);
+    setIsProfileVisible(true);
+  }
+
+  function handleMenuSignOut() {
+    setIsMenuVisible(false);
+    setIsProfileVisible(false);
+    setIsSettingsVisible(false);
+    onSignOut?.();
+  }
 
   return (
     <>
@@ -258,12 +281,12 @@ export default function RootTabs({ onSignOut, user }) {
           },
           headerRight: () => (
             <Pressable
-              onPress={() => setIsSettingsVisible(true)}
-              style={[styles.settingsButton, { backgroundColor: colors.overlay }]}
+              onPress={() => setIsMenuVisible(true)}
+              style={[styles.headerMenuButton, { backgroundColor: colors.overlay }]}
               accessibilityRole="button"
-              accessibilityLabel="Open settings"
+              accessibilityLabel="Open menu"
             >
-              <Ionicons name="settings-outline" size={18} color={colors.primary} />
+              <Ionicons name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
           ),
           headerShadowVisible: !isDarkMode,
@@ -284,6 +307,130 @@ export default function RootTabs({ onSignOut, user }) {
           </>
         )}
       </Tab.Navigator>
+
+      <Modal
+        visible={isMenuVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsMenuVisible(false)}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setIsMenuVisible(false)}>
+          <View
+            style={[
+              styles.menuCard,
+              {
+                top: Math.max(insets.top, 12) + 46,
+                backgroundColor: colors.card,
+                borderColor: colors.borderSoft,
+              },
+            ]}
+          >
+            <View style={styles.menuProfileRow}>
+              <View style={[styles.profileAvatarSmall, { backgroundColor: colors.primary }]}>
+                <Text style={styles.profileAvatarTextSmall}>{profileInitial}</Text>
+              </View>
+              <View style={styles.menuProfileText}>
+                <Text style={[styles.menuProfileName, { color: colors.text }]} numberOfLines={1}>
+                  {displayName}
+                </Text>
+                <Text style={[styles.menuProfileRole, { color: colors.textMuted }]}>{roleLabel}</Text>
+              </View>
+            </View>
+
+            <Pressable style={styles.menuItem} onPress={openProfileFromMenu}>
+              <Ionicons name="person-circle-outline" size={22} color={colors.primary} />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Profile</Text>
+            </Pressable>
+
+            <Pressable style={styles.menuItem} onPress={openSettingsFromMenu}>
+              <Ionicons name="settings-outline" size={22} color={colors.primary} />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Settings</Text>
+            </Pressable>
+
+            <Pressable style={[styles.menuItem, styles.menuDangerItem]} onPress={handleMenuSignOut}>
+              <Ionicons name="log-out-outline" size={22} color="#ef4444" />
+              <Text style={[styles.menuItemText, { color: "#ef4444" }]}>Log out</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isProfileVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setIsProfileVisible(false)}
+      >
+        <View
+          style={[
+            styles.profileModal,
+            {
+              backgroundColor: colors.background,
+              paddingTop: Math.max(insets.top, 12),
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.settingsHeader,
+              {
+                backgroundColor: colors.card,
+                borderBottomColor: colors.borderSoft,
+              },
+            ]}
+          >
+            <Text style={[styles.settingsTitle, { color: colors.text }]}>Profile</Text>
+            <Pressable
+              onPress={() => setIsProfileVisible(false)}
+              style={[styles.headerMenuButton, { backgroundColor: colors.overlay }]}
+              accessibilityRole="button"
+              accessibilityLabel="Close profile"
+            >
+              <Ionicons name="close-outline" size={22} color={colors.text} />
+            </Pressable>
+          </View>
+
+          <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+            <View style={[styles.profileAvatarLarge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.profileAvatarTextLarge}>{profileInitial}</Text>
+            </View>
+            <Text style={[styles.profileName, { color: colors.text }]}>{displayName}</Text>
+            <Text style={[styles.profileEmail, { color: colors.textMuted }]}>{displayEmail}</Text>
+            <View style={[styles.profileBadge, { backgroundColor: colors.overlay }]}>
+              <Ionicons name={isDriver ? "navigate-outline" : "person-outline"} size={16} color={colors.primary} />
+              <Text style={[styles.profileBadgeText, { color: colors.primary }]}>{roleLabel}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.profileDetailsCard, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}>
+            <View style={styles.profileDetailRow}>
+              <Text style={[styles.profileDetailLabel, { color: colors.textMuted }]}>User ID</Text>
+              <Text style={[styles.profileDetailValue, { color: colors.text }]}>{user?.id || "-"}</Text>
+            </View>
+            <View style={styles.profileDetailRow}>
+              <Text style={[styles.profileDetailLabel, { color: colors.textMuted }]}>Account Type</Text>
+              <Text style={[styles.profileDetailValue, { color: colors.text }]}>{roleLabel}</Text>
+            </View>
+            {user?.truckId ? (
+              <View style={styles.profileDetailRow}>
+                <Text style={[styles.profileDetailLabel, { color: colors.textMuted }]}>Truck ID</Text>
+                <Text style={[styles.profileDetailValue, { color: colors.text }]}>{user.truckId}</Text>
+              </View>
+            ) : null}
+            {user?.authProvider ? (
+              <View style={styles.profileDetailRow}>
+                <Text style={[styles.profileDetailLabel, { color: colors.textMuted }]}>Login Method</Text>
+                <Text style={[styles.profileDetailValue, { color: colors.text }]}>{user.authProvider}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <Pressable style={styles.profileSignOutButton} onPress={handleMenuSignOut}>
+            <Ionicons name="log-out-outline" size={20} color="#ffffff" />
+            <Text style={styles.profileSignOutText}>Log out</Text>
+          </Pressable>
+        </View>
+      </Modal>
 
       <Modal
         visible={isSettingsVisible}
@@ -312,11 +459,11 @@ export default function RootTabs({ onSignOut, user }) {
             <Text style={[styles.settingsTitle, { color: colors.text }]}>Settings</Text>
             <Pressable
               onPress={() => setIsSettingsVisible(false)}
-              style={[styles.settingsButton, { backgroundColor: colors.overlay }]}
+              style={[styles.headerMenuButton, { backgroundColor: colors.overlay }]}
               accessibilityRole="button"
               accessibilityLabel="Close settings"
             >
-              <Ionicons name="close-outline" size={20} color={colors.text} />
+              <Ionicons name="close-outline" size={22} color={colors.text} />
             </Pressable>
           </View>
           <SettingsScreen />
@@ -327,13 +474,162 @@ export default function RootTabs({ onSignOut, user }) {
 }
 
 const styles = StyleSheet.create({
-  settingsButton: {
+  headerMenuButton: {
     marginRight: 16,
     width: 38,
     height: 38,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
+  },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.18)",
+  },
+  menuCard: {
+    position: "absolute",
+    right: 14,
+    width: 238,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 10,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    shadowOffset: {
+      width: 0,
+      height: 14,
+    },
+    elevation: 14,
+  },
+  menuProfileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 8,
+    marginBottom: 4,
+  },
+  profileAvatarSmall: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileAvatarTextSmall: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  menuProfileText: {
+    flex: 1,
+  },
+  menuProfileName: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  menuProfileRole: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  menuItem: {
+    minHeight: 48,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+  },
+  menuDangerItem: {
+    marginTop: 2,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  profileModal: {
+    flex: 1,
+    paddingHorizontal: 18,
+  },
+  profileCard: {
+    alignItems: "center",
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 24,
+    marginTop: 18,
+  },
+  profileAvatarLarge: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  profileAvatarTextLarge: {
+    color: "#ffffff",
+    fontSize: 34,
+    fontWeight: "900",
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  profileEmail: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 6,
+    textAlign: "center",
+  },
+  profileBadge: {
+    marginTop: 16,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  profileBadgeText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  profileDetailsCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 18,
+    marginTop: 14,
+  },
+  profileDetailRow: {
+    gap: 4,
+    paddingVertical: 10,
+  },
+  profileDetailLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  profileDetailValue: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  profileSignOutButton: {
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: "#ef4444",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 18,
+  },
+  profileSignOutText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "900",
   },
   tabBarShell: {
     paddingTop: 10,
