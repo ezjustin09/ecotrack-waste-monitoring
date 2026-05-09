@@ -17,7 +17,6 @@ import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
 import { API_BASE_URL, loginUser, loginWithGoogle, requestPasswordReset, resetPassword, signUpUser } from "../services/api";
-import { BARANGAY_OPTIONS } from "../constants/barangays";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -87,7 +86,6 @@ const initialForms = {
     name: "",
     email: "",
     password: "",
-    barangay: "",
   },
   forgot: {
     email: "",
@@ -105,7 +103,6 @@ export default function AuthScreen({ onAuthenticated }) {
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [forgotCodeRequested, setForgotCodeRequested] = useState(false);
-  const [isSignupBarangayPickerOpen, setIsSignupBarangayPickerOpen] = useState(false);
   const heroOpacity = useRef(new Animated.Value(0)).current;
   const heroTranslateY = useRef(new Animated.Value(28)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
@@ -273,7 +270,6 @@ export default function AuthScreen({ onAuthenticated }) {
     setShowPassword(false);
     setErrorMessage("");
     setInfoMessage("");
-    setIsSignupBarangayPickerOpen(false);
 
     if (nextMode !== "forgot") {
       setForgotCodeRequested(false);
@@ -437,7 +433,6 @@ export default function AuthScreen({ onAuthenticated }) {
           name: String(forms.signup.name || "").trim(),
           email: String(forms.signup.email || "").trim(),
           password: String(forms.signup.password || ""),
-          barangay: String(forms.signup.barangay || "").trim(),
           role: "citizen",
         });
 
@@ -532,61 +527,6 @@ export default function AuthScreen({ onAuthenticated }) {
                 value={forms.signup.name}
                 onChangeText={(value) => updateForm("signup", "name", value)}
               />
-
-              <Text style={styles.label}>Designated Barangay</Text>
-              <Pressable
-                style={[
-                  styles.selectionField,
-                  isSignupBarangayPickerOpen && styles.selectionFieldOpen,
-                ]}
-                onPress={() => setIsSignupBarangayPickerOpen((current) => !current)}
-              >
-                <Text
-                  style={[
-                    styles.selectionFieldText,
-                    !forms.signup.barangay && styles.selectionPlaceholderText,
-                  ]}
-                >
-                  {forms.signup.barangay || "Select your barangay"}
-                </Text>
-                <Ionicons
-                  name={isSignupBarangayPickerOpen ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color="#64748b"
-                />
-              </Pressable>
-
-              {isSignupBarangayPickerOpen ? (
-                <View style={styles.selectionMenu}>
-                  {BARANGAY_OPTIONS.map((barangayOption) => {
-                    const isSelected = forms.signup.barangay === barangayOption;
-
-                    return (
-                      <Pressable
-                        key={barangayOption}
-                        style={[
-                          styles.selectionOption,
-                          isSelected && styles.selectionOptionSelected,
-                        ]}
-                        onPress={() => {
-                          updateForm("signup", "barangay", barangayOption);
-                          setIsSignupBarangayPickerOpen(false);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.selectionOptionText,
-                            isSelected && styles.selectionOptionTextSelected,
-                          ]}
-                        >
-                          {barangayOption}
-                        </Text>
-                        {isSelected ? <Ionicons name="checkmark" size={16} color="#0f766e" /> : null}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : null}
             </>
           ) : null}
 
@@ -821,60 +761,6 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     backgroundColor: "#f8fafc",
     marginBottom: 16,
-  },
-  selectionField: {
-    minHeight: 50,
-    borderWidth: 2,
-    borderColor: "#c3cedc",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: "#f8fafc",
-    marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  selectionFieldOpen: {
-    borderColor: "#0f766e",
-  },
-  selectionFieldText: {
-    flex: 1,
-    color: "#0f172a",
-    fontSize: 15,
-    paddingRight: 12,
-  },
-  selectionPlaceholderText: {
-    color: "#94a3b8",
-  },
-  selectionMenu: {
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    marginBottom: 16,
-    overflow: "hidden",
-  },
-  selectionOption: {
-    minHeight: 48,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  selectionOptionSelected: {
-    backgroundColor: "#ecfeff",
-  },
-  selectionOptionText: {
-    flex: 1,
-    color: "#0f172a",
-    fontSize: 14,
-    paddingRight: 12,
-  },
-  selectionOptionTextSelected: {
-    color: "#0f766e",
-    fontWeight: "700",
   },
   passwordField: {
     position: "relative",

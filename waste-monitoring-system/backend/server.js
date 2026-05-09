@@ -67,14 +67,6 @@ const USER_ROLES = {
 };
 
 const BLOCKED_TRUCK_IDS = new Set(["TRUCK-001"]);
-const RESIDENT_BARANGAYS = [
-  "Zone 1 - West Pateros",
-  "Zone 2 - Central Pateros",
-  "Zone 3 - East Pateros",
-  "Zone 4 - Riverside",
-  "Zone 5 - Market Area",
-];
-const ALL_ZONES_LABEL = "All Zones";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
@@ -525,15 +517,11 @@ function getDateKeyInTimeZone(value, timeZone = APP_TIME_ZONE) {
 }
 
 function sanitizeTruck(truck) {
-  const barangay = getTruckCoverageArea(truck);
-
   return {
     truckId: truck.truckId,
     status: truck.status,
     latitude: truck.latitude,
     longitude: truck.longitude,
-    barangay,
-    zone: barangay,
     updatedAt: truck.updatedAt,
   };
 }
@@ -545,7 +533,6 @@ function sanitizeUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
-    barangay: getResidentBarangay(user),
     truckId: user.truckId || "",
     authProvider: user.authProvider || "local",
     avatarUrl: user.avatarUrl || "",
@@ -651,10 +638,6 @@ function listTrucks() {
   return Array.from(trucks.values())
     .filter((truck) => !isBlockedTruckId(truck.truckId))
     .map(sanitizeTruck);
-}
-
-function listVisibleTrucksForUser(user) {
-  return listTrucks().filter((truck) => canUserViewTruck(user, truck));
 }
 
 function summarizeTruckStatuses(truckList) {
@@ -919,72 +902,6 @@ function normalizeTruckId(value) {
   return String(value || "").trim().toUpperCase();
 }
 
-function normalizeResidentBarangay(value, { allowEmpty = false } = {}) {
-  const text = String(value || "").trim();
-
-  if (!text) {
-    return allowEmpty ? "" : "";
-  }
-
-  const match = RESIDENT_BARANGAYS.find(
-    (barangay) => barangay.toLowerCase() === text.toLowerCase()
-  );
-  return match || "";
-}
-
-function normalizeCoverageArea(value, { allowEmpty = false } = {}) {
-  const text = String(value || "").trim();
-
-  if (!text) {
-    return allowEmpty ? "" : "";
-  }
-
-  if (text.toLowerCase() === ALL_ZONES_LABEL.toLowerCase() || text.toLowerCase() === "all barangays") {
-    return ALL_ZONES_LABEL;
-  }
-
-  return normalizeResidentBarangay(text, { allowEmpty });
-}
-
-function getResidentBarangay(user) {
-  return normalizeResidentBarangay(user?.barangay, { allowEmpty: true });
-}
-
-function getTruckCoverageArea(truck) {
-  return normalizeCoverageArea(truck?.barangay || truck?.zone, { allowEmpty: true });
-}
-
-function isCitizenUser(user) {
-  return String(user?.role || "").trim().toLowerCase() === USER_ROLES.citizen;
-}
-
-function canUserViewTruck(user, truck) {
-  if (!isCitizenUser(user)) {
-    return true;
-  }
-
-  const residentBarangay = getResidentBarangay(user);
-  if (!residentBarangay) {
-    return false;
-  }
-
-  const truckCoverageArea = getTruckCoverageArea(truck);
-  return Boolean(
-    truckCoverageArea &&
-      (truckCoverageArea === residentBarangay || truckCoverageArea === ALL_ZONES_LABEL)
-  );
-}
-
-function getBarangaySocketRoom(barangay) {
-  const normalizedBarangay = getResidentBarangay({ barangay });
-
-  if (!normalizedBarangay) {
-    return "";
-  }
-
-  return `citizens:barangay:${normalizedBarangay.toLowerCase()}`;
-}
-
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -1212,16 +1129,6 @@ async function findDriverTripTicketForSharing({ truckId, driverName = "", occurr
   })[0];
 }
 
-async function resolveLiveTruckCoverageArea(truckId, occurredAt = new Date()) {
-  const tripTicket = await findDriverTripTicketForSharing({
-    truckId,
-    occurredAt,
-    preferredStatuses: ["On Route", "Scheduled", "Delayed", "Completed", "Missed"],
-  });
-
-  return getTruckCoverageArea(tripTicket);
-}
-
 function normalizeDriverTripSharingPayload(payload = {}, fallbackTruckId = "") {
   const truckId = normalizeTruckId(payload.truckId || fallbackTruckId);
   const occurredAt = payload.occurredAt ? new Date(payload.occurredAt) : null;
@@ -1310,7 +1217,7 @@ async function syncDriverTripTicketSharing({
   }
 
   const publicTripTicket = sanitizeTripTicket(updatedTripTicket);
-  emitAdminOnlyEvent("trip-ticket:updated", publicTripTicket);
+  io.emit("trip-ticket:updated", publicTripTicket);
   return publicTripTicket;
 }
 
@@ -1852,8 +1759,6 @@ async function listUsersEligibleForNearbyTruckAlerts() {
         projection: {
           id: 1,
           name: 1,
-          role: 1,
-          barangay: 1,
           pushTokens: 1,
           nearbyAlertLocation: 1,
         },
@@ -2252,10 +2157,6 @@ async function processNearbyTruckAlerts(truck) {
   };
 
   for (const user of eligibleUsers) {
-    if (!canUserViewTruck(user, truck)) {
-      continue;
-    }
-
     const location = user?.nearbyAlertLocation;
     const pushTokens = collectUserExpoPushTokens(user);
     summary.availableTokenCount += pushTokens.length;
@@ -2541,85 +2442,6 @@ function extractBearerToken(value = "") {
     : "";
 }
 
-async function findActiveUserSession(token) {
-  if (!token) {
-    return null;
-  }
-
-  return userSessionsCollection.findOne({
-    token,
-    expiresAt: { $gt: new Date() },
-  });
-}
-
-async function findActiveAdminSession(token) {
-  if (!token) {
-    return null;
-  }
-
-  return adminSessionsCollection.findOne({
-    token,
-    expiresAt: { $gt: new Date() },
-  });
-}
-
-async function findUserBySessionToken(token) {
-  const activeSession = await findActiveUserSession(token);
-  const user = activeSession?.userId ? await findUserById(activeSession.userId) : null;
-
-  if (!user && token) {
-    await userSessionsCollection.deleteOne({ token });
-  }
-
-  return user;
-}
-
-function extractSocketAuthToken(socket) {
-  const directToken = String(
-    socket?.handshake?.auth?.token ||
-      socket?.handshake?.auth?.accessToken ||
-      socket?.handshake?.auth?.sessionToken ||
-      ""
-  ).trim();
-
-  if (directToken) {
-    return directToken;
-  }
-
-  return (
-    extractBearerToken(socket?.handshake?.auth?.authorization) ||
-    extractBearerToken(socket?.handshake?.headers?.authorization)
-  );
-}
-
-async function resolveSocketViewer(socket) {
-  const token = extractSocketAuthToken(socket);
-
-  if (!token) {
-    return null;
-  }
-
-  const adminSession = await findActiveAdminSession(token);
-  if (adminSession) {
-    return {
-      type: "admin",
-      token,
-      admin: adminSession,
-    };
-  }
-
-  const user = await findUserBySessionToken(token);
-  if (!user) {
-    return null;
-  }
-
-  return {
-    type: "user",
-    token,
-    user: sanitizeUser(user),
-  };
-}
-
 function normalizeTruckPayload(payload = {}) {
   const latitude = parseCoordinate(payload.latitude);
   const longitude = parseCoordinate(payload.longitude);
@@ -2707,20 +2529,6 @@ function normalizeProfilePicturePayload(payload = {}) {
 
   return {
     avatarUrl,
-  };
-}
-
-function normalizeUserBarangayPayload(payload = {}) {
-  const barangay = normalizeResidentBarangay(payload.barangay);
-
-  if (!barangay) {
-    return {
-      error: "Please select a valid barangay",
-    };
-  }
-
-  return {
-    barangay,
   };
 }
 
@@ -2926,7 +2734,6 @@ function normalizeSignupPayload(payload = {}) {
   const password = String(payload.password || "").trim();
   const role = normalizeRole(payload.role);
   const truckId = normalizeTruckId(payload.truckId);
-  const barangay = role === USER_ROLES.citizen ? normalizeResidentBarangay(payload.barangay) : "";
 
   if (!name || !email || !password) {
     return { error: "name, email, and password are required" };
@@ -2944,10 +2751,6 @@ function normalizeSignupPayload(payload = {}) {
     return { error: "Password must be at least 6 characters long" };
   }
 
-  if (role === USER_ROLES.citizen && !barangay) {
-    return { error: "Please select your designated barangay" };
-  }
-
   if (role === USER_ROLES.driver && !truckId) {
     return { error: "truckId is required for driver accounts" };
   }
@@ -2961,7 +2764,6 @@ function normalizeSignupPayload(payload = {}) {
     email,
     password,
     role,
-    barangay,
     truckId: role === USER_ROLES.driver ? truckId : "",
   };
 }
@@ -3143,9 +2945,14 @@ async function authenticateRequest(req, res, next) {
       return;
     }
 
-    const user = await findUserBySessionToken(token);
+    const activeSession = await userSessionsCollection.findOne({
+      token,
+      expiresAt: { $gt: new Date() },
+    });
+    const user = activeSession?.userId ? await findUserById(activeSession.userId) : null;
 
     if (!user) {
+      await userSessionsCollection.deleteOne({ token });
       res.status(401).json({
         error: "Invalid or expired session",
       });
@@ -3175,7 +2982,10 @@ async function authenticateAdminRequest(req, res, next) {
       return;
     }
 
-    const adminSession = await findActiveAdminSession(token);
+    const adminSession = await adminSessionsCollection.findOne({
+      token,
+      expiresAt: { $gt: new Date() },
+    });
 
     if (!adminSession) {
       await adminSessionsCollection.deleteOne({ token });
@@ -3243,7 +3053,6 @@ async function connectDatabase() {
     usersCollection.createIndex({ email: 1 }, { unique: true }),
     usersCollection.createIndex({ id: 1 }, { unique: true }),
     usersCollection.createIndex({ role: 1, truckId: 1 }),
-    usersCollection.createIndex({ role: 1, barangay: 1 }),
     usersCollection.createIndex({ pushTokens: 1 }),
     reportsCollection.createIndex({ id: 1 }, { unique: true }),
     reportsCollection.createIndex({ createdAt: -1 }),
@@ -3840,10 +3649,8 @@ app.put(
       const removedTruck = trucks.get(existingDriver.truckId);
       if (removedTruck) {
         trucks.delete(existingDriver.truckId);
-        emitTruckEvent("truck:removed", {
+        io.emit("truck:removed", {
           truckId: existingDriver.truckId,
-          barangay: getTruckCoverageArea(removedTruck),
-          zone: getTruckCoverageArea(removedTruck),
         });
       }
     }
@@ -3881,10 +3688,8 @@ app.delete(
     const activeTruck = trucks.get(existingDriver.truckId);
     if (activeTruck) {
       trucks.delete(existingDriver.truckId);
-      emitTruckEvent("truck:removed", {
+      io.emit("truck:removed", {
         truckId: existingDriver.truckId,
-        barangay: getTruckCoverageArea(activeTruck),
-        zone: getTruckCoverageArea(activeTruck),
       });
     }
 
@@ -3954,7 +3759,7 @@ app.post(
 
     await tripTicketsCollection.insertOne(tripTicket);
     const publicTripTicket = sanitizeTripTicket(tripTicket);
-    emitAdminOnlyEvent("trip-ticket:created", publicTripTicket);
+    io.emit("trip-ticket:created", publicTripTicket);
 
     res.status(201).json({
       message: "Trip ticket created successfully.",
@@ -4036,7 +3841,7 @@ app.put(
     }
 
     const publicTripTicket = sanitizeTripTicket(updatedTripTicket);
-    emitAdminOnlyEvent("trip-ticket:updated", publicTripTicket);
+    io.emit("trip-ticket:updated", publicTripTicket);
 
     res.status(200).json({
       message: "Trip ticket updated successfully.",
@@ -4067,7 +3872,7 @@ app.delete(
       return;
     }
 
-    emitAdminOnlyEvent("trip-ticket:deleted", {
+    io.emit("trip-ticket:deleted", {
       id: tripTicketId,
     });
 
@@ -4447,7 +4252,6 @@ app.post(
         passwordHash: await hashPassword(crypto.randomBytes(16).toString("hex")),
         passwordChangedAt: new Date(),
         role: USER_ROLES.citizen,
-        barangay: "",
         truckId: "",
         authProvider: "google",
         googleId: googleProfile.sub || "",
@@ -4660,7 +4464,6 @@ app.post(
       passwordHash: await hashPassword(signup.password),
       passwordChangedAt: new Date(),
       role: signup.role,
-      barangay: signup.barangay,
       truckId: signup.truckId,
       authProvider: "local",
       createdAt: new Date(),
@@ -4779,46 +4582,6 @@ app.post(
     res.status(200).json({
       message: "Trip ticket completed time updated.",
       tripTicket,
-    });
-  })
-);
-
-app.put(
-  "/users/barangay",
-  authenticateRequest,
-  authorizeRoles(USER_ROLES.citizen),
-  asyncRoute(async (req, res) => {
-    const payload = normalizeUserBarangayPayload(req.body);
-
-    if (payload.error) {
-      res.status(400).json({
-        error: payload.error,
-      });
-      return;
-    }
-
-    const updateResult = await usersCollection.updateOne(
-      { id: req.user.id },
-      {
-        $set: {
-          barangay: payload.barangay,
-          profileUpdatedAt: new Date(),
-        },
-      }
-    );
-
-    if (!updateResult.matchedCount) {
-      res.status(404).json({
-        error: "Account not found",
-      });
-      return;
-    }
-
-    const user = await findUserById(req.user.id);
-
-    res.status(200).json({
-      message: "Designated barangay updated.",
-      user: sanitizeUser(user),
     });
   })
 );
@@ -4970,7 +4733,7 @@ app.post(
 app.get("/trucks", authenticateRequest, (req, res) => {
   res.json({
     user: req.user,
-    trucks: listVisibleTrucksForUser(req.user),
+    trucks: listTrucks(),
   });
 });
 
@@ -4999,7 +4762,7 @@ app.post(
     await reportsCollection.insertOne(enrichedReport);
 
     const publicReport = sanitizeReport(enrichedReport);
-    emitAdminOnlyEvent("report:created", publicReport);
+    io.emit("report:created", publicReport);
 
     res.status(201).json({
       message: "Illegal dumping report submitted successfully.",
@@ -5008,156 +4771,63 @@ app.post(
   })
 );
 
-const SOCKET_ROOMS = {
-  admins: "admins",
-  drivers: "drivers",
-  citizens: "citizens",
-};
+io.on("connection", (socket) => {
+  console.log("Client connected: " + socket.id);
+  socket.emit("trucks:snapshot", listTrucks());
 
-function emitAdminOnlyEvent(eventName, payload) {
-  io.to(SOCKET_ROOMS.admins).emit(eventName, payload);
-}
+  socket.on("truck:update", (payload, acknowledge) => {
+    const truck = normalizeTruckPayload(payload);
 
-function emitTruckEvent(eventName, payload) {
-  io.to(SOCKET_ROOMS.admins).emit(eventName, payload);
-  io.to(SOCKET_ROOMS.drivers).emit(eventName, payload);
-
-  const coverageArea = getTruckCoverageArea(payload);
-  if (coverageArea === ALL_ZONES_LABEL) {
-    io.to(SOCKET_ROOMS.citizens).emit(eventName, payload);
-    return;
-  }
-
-  const barangayRoom = getBarangaySocketRoom(coverageArea);
-  if (barangayRoom) {
-    io.to(barangayRoom).emit(eventName, payload);
-  }
-}
-
-function emitTruckSnapshotToSocket(socket) {
-  const viewer = socket?.data?.viewer;
-
-  if (viewer?.type === "admin") {
-    socket.emit("trucks:snapshot", listTrucks());
-    return;
-  }
-
-  socket.emit("trucks:snapshot", listVisibleTrucksForUser(viewer?.user));
-}
-
-function acknowledgeSocketError(acknowledge, errorMessage) {
-  if (typeof acknowledge === "function") {
-    acknowledge({
-      ok: false,
-      error: errorMessage,
-    });
-  }
-}
-
-io.use(async (socket, next) => {
-  try {
-    const viewer = await resolveSocketViewer(socket);
-
-    if (!viewer) {
-      next(new Error(extractSocketAuthToken(socket) ? "Invalid or expired session" : "Authentication required"));
+    if (!truck) {
+      if (typeof acknowledge === "function") {
+        acknowledge({
+          ok: false,
+          error: "truckId, latitude, and longitude are required",
+        });
+      }
       return;
     }
 
-    socket.data.viewer = viewer;
-    next();
-  } catch (error) {
-    console.error("Socket authentication error:", error?.message || error);
-    next(new Error("Authentication failed"));
-  }
-});
-
-io.on("connection", (socket) => {
-  const viewer = socket.data.viewer;
-
-  if (viewer?.type === "admin") {
-    socket.join(SOCKET_ROOMS.admins);
-  } else if (viewer?.type === "user") {
-    if (viewer.user.role === USER_ROLES.driver) {
-      socket.join(SOCKET_ROOMS.drivers);
-    } else {
-      const barangayRoom = getBarangaySocketRoom(viewer.user.barangay);
-      if (barangayRoom) {
-        socket.join(SOCKET_ROOMS.citizens);
-        socket.join(barangayRoom);
-      }
-    }
-  }
-
-  console.log("Client connected: " + socket.id);
-  emitTruckSnapshotToSocket(socket);
-
-  socket.on("truck:update", async (payload, acknowledge) => {
-    try {
-      if (viewer?.type !== "user" || viewer.user.role !== USER_ROLES.driver) {
-        acknowledgeSocketError(acknowledge, "Driver authentication required");
-        return;
-      }
-
-      const truck = normalizeTruckPayload(payload);
-
-      if (!truck) {
-        acknowledgeSocketError(acknowledge, "truckId, latitude, and longitude are required");
-        return;
-      }
-
-      if (isBlockedTruckId(truck.truckId)) {
-        acknowledgeSocketError(acknowledge, "TRUCK-001 is reserved and cannot be used");
-        return;
-      }
-
-      const assignedTruckId = normalizeTruckId(viewer.user.truckId);
-      if (assignedTruckId && assignedTruckId !== truck.truckId) {
-        acknowledgeSocketError(acknowledge, `This driver is assigned to ${assignedTruckId}`);
-        return;
-      }
-
-      const coverageArea = await resolveLiveTruckCoverageArea(truck.truckId, new Date(truck.updatedAt));
-      const truckRecord = {
-        ...truck,
-        barangay: coverageArea,
-        zone: coverageArea,
-        ownerSocketId: socket.id,
-      };
-      trucks.set(truck.truckId, truckRecord);
-
-      const publicTruck = sanitizeTruck(truckRecord);
-      emitTruckEvent("truck:updated", publicTruck);
-      processNearbyTruckAlerts(publicTruck).catch((error) => {
-        console.error(`[push] nearby truck alert processing failed for ${publicTruck.truckId}:`, error?.message || error);
-      });
-
+    if (isBlockedTruckId(truck.truckId)) {
       if (typeof acknowledge === "function") {
         acknowledge({
-          ok: true,
-          truck: publicTruck,
+          ok: false,
+          error: "TRUCK-001 is reserved and cannot be used",
         });
       }
-    } catch (error) {
-      acknowledgeSocketError(acknowledge, error?.message || "Unable to update the truck location.");
+      return;
+    }
+
+    const truckRecord = {
+      ...truck,
+      ownerSocketId: socket.id,
+    };
+    trucks.set(truck.truckId, truckRecord);
+
+    const publicTruck = sanitizeTruck(truckRecord);
+    io.emit("truck:updated", publicTruck);
+    processNearbyTruckAlerts(publicTruck).catch((error) => {
+      console.error(`[push] nearby truck alert processing failed for ${publicTruck.truckId}:`, error?.message || error);
+    });
+
+    if (typeof acknowledge === "function") {
+      acknowledge({
+        ok: true,
+        truck: publicTruck,
+      });
     }
   });
 
   socket.on("truck:remove", (payload, acknowledge) => {
-    if (viewer?.type !== "user" || viewer.user.role !== USER_ROLES.driver) {
-      acknowledgeSocketError(acknowledge, "Driver authentication required");
-      return;
-    }
-
     const truckId = normalizeTruckId(payload?.truckId);
 
     if (!truckId) {
-      acknowledgeSocketError(acknowledge, "truckId is required");
-      return;
-    }
-
-    const assignedTruckId = normalizeTruckId(viewer.user.truckId);
-    if (assignedTruckId && assignedTruckId !== truckId) {
-      acknowledgeSocketError(acknowledge, `This driver is assigned to ${assignedTruckId}`);
+      if (typeof acknowledge === "function") {
+        acknowledge({
+          ok: false,
+          error: "truckId is required",
+        });
+      }
       return;
     }
 
@@ -5175,10 +4845,8 @@ io.on("connection", (socket) => {
     }
 
     clearNearbyTruckStateForTruck(removedTruck.truckId);
-    emitTruckEvent("truck:removed", {
+    io.emit("truck:removed", {
       truckId: removedTruck.truckId,
-      barangay: removedTruck.barangay,
-      zone: removedTruck.zone,
     });
 
     if (typeof acknowledge === "function") {
@@ -5196,10 +4864,8 @@ io.on("connection", (socket) => {
       .forEach((truck) => {
         trucks.delete(truck.truckId);
         clearNearbyTruckStateForTruck(truck.truckId);
-        emitTruckEvent("truck:removed", {
+        io.emit("truck:removed", {
           truckId: truck.truckId,
-          barangay: getTruckCoverageArea(truck),
-          zone: getTruckCoverageArea(truck),
         });
       });
 

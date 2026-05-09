@@ -142,7 +142,6 @@ export default function MapScreen() {
   const [isSheetCollapsed, setIsSheetCollapsed] = useState(false);
   const [alertAccess, setAlertAccess] = useState("checking");
   const alertsEnabled = feedNotificationsEnabled && alertAccess === "granted";
-  const designatedBarangay = String(user?.barangay || "").trim();
 
   const region = useMemo(() => buildMapRegion(trucks, userLocation), [trucks, userLocation]);
   const selectedTruck = useMemo(
@@ -388,7 +387,7 @@ export default function MapScreen() {
       locationSubscription = await startLocationTracking();
     })();
 
-    const socket = createTruckSocket(token);
+    const socket = createTruckSocket();
 
     socket.on("connect", () => {
       setConnectionLabel("Live");
@@ -401,9 +400,7 @@ export default function MapScreen() {
 
     socket.on("connect_error", (error) => {
       setConnectionLabel("Offline");
-      if (!handleAuthError(error.message)) {
-        setErrorMessage(error.message);
-      }
+      setErrorMessage(error.message);
     });
 
     socket.on("trucks:snapshot", (snapshot) => {
@@ -426,7 +423,7 @@ export default function MapScreen() {
       socket.disconnect();
       locationSubscription?.remove();
     };
-  }, [designatedBarangay, token]);
+  }, []);
 
   useEffect(() => {
     if (!selectedTruckId && trucks[0]) {
@@ -601,9 +598,7 @@ export default function MapScreen() {
         ) : null}
         {!errorMessage && trucks.length === 0 ? (
           <Text style={[styles.emptyBanner, { backgroundColor: colors.overlay, color: colors.primary }]}>
-            {designatedBarangay
-              ? "No active trucks in your designated barangay yet."
-              : "Set your designated barangay in Profile to view live trucks."}
+            No active trucks yet. Ask a driver to start Live GPS Sharing.
           </Text>
         ) : null}
 

@@ -24,8 +24,7 @@ import ScheduleScreen from "../screens/ScheduleScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import { useAuth } from "../context/AuthContext";
 import { usePreferences } from "../context/PreferencesContext";
-import { updateProfilePicture, updateUserBarangay } from "../services/api";
-import { BARANGAY_OPTIONS } from "../constants/barangays";
+import { updateProfilePicture } from "../services/api";
 
 const Tab = createBottomTabNavigator();
 const PROFILE_IMAGE_STORAGE_PREFIX = "ecotrack:profile-image:";
@@ -297,16 +296,13 @@ export default function RootTabs({ onSignOut, user }) {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const [isProfileVisible, setIsProfileVisible] = useState(false);
-  const [isBarangayPickerVisible, setIsBarangayPickerVisible] = useState(false);
   const [profileImageUri, setProfileImageUri] = useState("");
   const [isUpdatingProfileImage, setIsUpdatingProfileImage] = useState(false);
-  const [isUpdatingBarangay, setIsUpdatingBarangay] = useState(false);
   const menuTranslateX = useRef(new Animated.Value(28)).current;
   const menuCardOpacity = useRef(new Animated.Value(0)).current;
   const menuBackdropOpacity = useRef(new Animated.Value(0)).current;
   const displayName = String(user?.name || user?.email || "Resident User").trim();
   const displayEmail = String(user?.email || "No email available").trim();
-  const designatedBarangay = String(user?.barangay || "").trim();
   const profileInitial = displayName.charAt(0).toUpperCase() || "R";
   const roleLabel = isDriver ? "Driver" : "Resident";
   const profileStorageKey = `${PROFILE_IMAGE_STORAGE_PREFIX}${user?.id || user?.email || "guest"}`;
@@ -425,7 +421,6 @@ export default function RootTabs({ onSignOut, user }) {
     setIsMenuVisible(false);
     setIsProfileVisible(false);
     setIsSettingsVisible(false);
-    setIsBarangayPickerVisible(false);
     onSignOut?.();
   }
 
@@ -514,37 +509,6 @@ export default function RootTabs({ onSignOut, user }) {
       Alert.alert("Unable to update photo", error?.message || "Please try again.");
     } finally {
       setIsUpdatingProfileImage(false);
-    }
-  }
-
-  async function handleSelectBarangay(nextBarangay) {
-    if (!token || isDriver || isUpdatingBarangay || !nextBarangay || nextBarangay === designatedBarangay) {
-      setIsBarangayPickerVisible(false);
-      return;
-    }
-
-    setIsUpdatingBarangay(true);
-
-    try {
-      const response = await updateUserBarangay(nextBarangay, token);
-
-      if (response.user) {
-        setSession({
-          token,
-          user: response.user,
-        });
-      }
-
-      setIsBarangayPickerVisible(false);
-    } catch (error) {
-      if (error?.message === "Authentication required" || error?.message === "Invalid or expired session") {
-        finalizeSignOut();
-        return;
-      }
-
-      Alert.alert("Unable to update barangay", error?.message || "Please try again.");
-    } finally {
-      setIsUpdatingBarangay(false);
     }
   }
 
@@ -752,32 +716,6 @@ export default function RootTabs({ onSignOut, user }) {
               <Text style={[styles.profileDetailLabel, { color: colors.textMuted }]}>Account Type</Text>
               <Text style={[styles.profileDetailValue, { color: colors.text }]}>{roleLabel}</Text>
             </View>
-            {!isDriver ? (
-              <View style={styles.profileDetailRow}>
-                <Text style={[styles.profileDetailLabel, { color: colors.textMuted }]}>Designated Barangay</Text>
-                <Text style={[styles.profileDetailValue, { color: colors.text }]}>
-                  {designatedBarangay || "Not set"}
-                </Text>
-                <Pressable
-                  style={[
-                    styles.changePhotoButton,
-                    { backgroundColor: colors.overlay, alignSelf: "flex-start", marginBottom: 0 },
-                    isUpdatingBarangay && styles.profileImageUpdating,
-                  ]}
-                  onPress={() => setIsBarangayPickerVisible(true)}
-                  disabled={isUpdatingBarangay}
-                >
-                  {isUpdatingBarangay ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <Ionicons name="location-outline" size={16} color={colors.primary} />
-                  )}
-                  <Text style={[styles.changePhotoText, { color: colors.primary }]}>
-                    {designatedBarangay ? "Change barangay" : "Set barangay"}
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
             {user?.truckId ? (
               <View style={styles.profileDetailRow}>
                 <Text style={[styles.profileDetailLabel, { color: colors.textMuted }]}>Truck ID</Text>
@@ -793,55 +731,6 @@ export default function RootTabs({ onSignOut, user }) {
           </View>
 
         </ScrollView>
-      </Modal>
-
-      <Modal
-        visible={isBarangayPickerVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setIsBarangayPickerVisible(false)}
-      >
-        <Pressable style={styles.menuBackdrop} onPress={() => setIsBarangayPickerVisible(false)}>
-          <View
-            style={[
-              styles.barangayPickerCard,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.borderSoft,
-              },
-            ]}
-          >
-            <Text style={[styles.barangayPickerTitle, { color: colors.text }]}>Choose designated barangay</Text>
-            <ScrollView style={styles.barangayPickerList} showsVerticalScrollIndicator={false}>
-              {BARANGAY_OPTIONS.map((barangayOption) => {
-                const isSelected = designatedBarangay === barangayOption;
-
-                return (
-                  <Pressable
-                    key={barangayOption}
-                    style={[
-                      styles.barangayPickerOption,
-                      { borderColor: colors.borderSoft },
-                      isSelected && { backgroundColor: colors.overlay, borderColor: colors.primary },
-                    ]}
-                    onPress={() => handleSelectBarangay(barangayOption)}
-                    disabled={isUpdatingBarangay}
-                  >
-                    <Text
-                      style={[
-                        styles.barangayPickerOptionText,
-                        { color: isSelected ? colors.primary : colors.text },
-                      ]}
-                    >
-                      {barangayOption}
-                    </Text>
-                    {isSelected ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} /> : null}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </Pressable>
       </Modal>
 
       <Modal
@@ -1079,39 +968,6 @@ const styles = StyleSheet.create({
   profileDetailValue: {
     fontSize: 16,
     fontWeight: "800",
-  },
-  barangayPickerCard: {
-    marginHorizontal: 20,
-    marginTop: 120,
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 18,
-    maxHeight: 420,
-  },
-  barangayPickerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 12,
-  },
-  barangayPickerList: {
-    maxHeight: 320,
-  },
-  barangayPickerOption: {
-    minHeight: 48,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  barangayPickerOptionText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "700",
-    paddingRight: 12,
   },
   tabBarShell: {
     paddingTop: 10,

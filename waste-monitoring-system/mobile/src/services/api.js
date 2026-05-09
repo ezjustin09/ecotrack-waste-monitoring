@@ -219,16 +219,6 @@ export async function updateProfilePicture(avatarUrl, token) {
   return parseJsonResponse(response);
 }
 
-export async function updateUserBarangay(barangay, token) {
-  const response = await fetch(`${API_BASE_URL}/users/barangay`, {
-    method: "PUT",
-    headers: buildHeaders(token),
-    body: JSON.stringify({ barangay }),
-  });
-
-  return parseJsonResponse(response);
-}
-
 async function updateDriverLiveSharingTripTicket(action, truckId, occurredAt, token) {
   const response = await fetch(`${API_BASE_URL}/driver/live-sharing/${action}`, {
     method: "POST",
