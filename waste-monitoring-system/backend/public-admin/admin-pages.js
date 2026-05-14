@@ -1,5 +1,17 @@
 const STORAGE_KEY = "wm_admin_token";
 const SESSION_KEY = "wm_admin_token_session";
+const PATEROS_BARANGAYS = [
+  "Aguho",
+  "Magtanggol",
+  "Martires Del 96",
+  "Poblacion",
+  "San Pedro",
+  "San Roque",
+  "Santa Ana",
+  "Santo Rosario-Kanluran",
+  "Santo Rosario-Silangan",
+  "Tabacalera",
+];
 
 const state = {
   token: "",
@@ -615,7 +627,7 @@ function renderSchedule(schedule = []) {
       return `
         <article class="schedule-item">
           <h3>${item.id} - ${item.day}</h3>
-          <p>${item.zone}</p>
+          <p>${item.barangay || item.zone}</p>
           <p>${item.timeWindow} - ${item.wasteType}</p>
           <p>${item.notes || "No notes"}</p>
           ${actions}
@@ -1309,7 +1321,7 @@ function setScheduleForm(schedule = null) {
 
   idInput.value = schedule.id || "";
   dayInput.value = schedule.day || "";
-  zoneInput.value = schedule.zone || "";
+  zoneInput.value = schedule.barangay || schedule.zone || "";
   timeWindowInput.value = schedule.timeWindow || "";
   wasteTypeInput.value = schedule.wasteType || "";
   notesInput.value = schedule.notes || "";
@@ -1390,7 +1402,7 @@ function setupScheduleManagement() {
     };
 
     if (!body.day || !body.zone || !body.timeWindow || !body.wasteType) {
-      showScheduleMessage("Please fill day, zone, time window, and waste type.", true);
+      showScheduleMessage("Please fill day, barangay, time window, and waste type.", true);
       return;
     }
 

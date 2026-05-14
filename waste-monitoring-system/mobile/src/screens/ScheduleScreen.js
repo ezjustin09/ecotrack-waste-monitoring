@@ -25,6 +25,18 @@ const DAY_ORDER = {
 
 const DAY_LABELS = Object.keys(DAY_ORDER);
 const ALL_BARANGAYS_FILTER = "All barangays";
+const PATEROS_BARANGAYS = [
+  "Aguho",
+  "Magtanggol",
+  "Martires Del 96",
+  "Poblacion",
+  "San Pedro",
+  "San Roque",
+  "Santa Ana",
+  "Santo Rosario-Kanluran",
+  "Santo Rosario-Silangan",
+  "Tabacalera",
+];
 
 function getScheduleArea(entry) {
   return String(entry?.barangay || entry?.zone || "").trim();
@@ -148,9 +160,19 @@ export default function ScheduleScreen() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const barangayOptions = useMemo(() => {
+    const barangayOrder = new Map(PATEROS_BARANGAYS.map((barangay, index) => [barangay, index]));
     const options = Array.from(
       new Set(schedule.map((entry) => getScheduleArea(entry)).filter(Boolean))
-    ).sort((first, second) => first.localeCompare(second));
+    ).sort((first, second) => {
+      const firstIndex = barangayOrder.has(first) ? barangayOrder.get(first) : Number.MAX_SAFE_INTEGER;
+      const secondIndex = barangayOrder.has(second) ? barangayOrder.get(second) : Number.MAX_SAFE_INTEGER;
+
+      if (firstIndex !== secondIndex) {
+        return firstIndex - secondIndex;
+      }
+
+      return first.localeCompare(second);
+    });
 
     return [ALL_BARANGAYS_FILTER, ...options];
   }, [schedule]);

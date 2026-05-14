@@ -262,6 +262,29 @@ const pushDiagnostics = {
   lastNearbyTruckAlert: null,
 };
 const nearbyTruckAlertStateByUserId = new Map();
+const PATEROS_BARANGAYS = [
+  "Aguho",
+  "Magtanggol",
+  "Martires Del 96",
+  "Poblacion",
+  "San Pedro",
+  "San Roque",
+  "Santa Ana",
+  "Santo Rosario-Kanluran",
+  "Santo Rosario-Silangan",
+  "Tabacalera",
+];
+const PATEROS_BARANGAY_LOOKUP = new Map(
+  PATEROS_BARANGAYS.map((barangay) => [barangay.toLowerCase(), barangay])
+);
+const LEGACY_SCHEDULE_ZONES = [
+  "Zone 1 - West Pateros",
+  "Zone 2 - Central Pateros",
+  "Zone 3 - East Pateros",
+  "Zone 4 - Riverside",
+  "Zone 5 - Market Area",
+  "All Zones",
+];
 
 if (EMAIL_SENDING_ENABLED) {
   mailTransporter = nodemailer.createTransport({
@@ -279,7 +302,7 @@ const DEFAULT_COLLECTION_SCHEDULE = [
   {
     id: "SCH-001",
     day: "Monday",
-    zone: "Zone 1 - West Pateros",
+    zone: "Aguho",
     timeWindow: "6:00 AM - 10:00 AM",
     wasteType: "Biodegradable",
     notes: "Place bins outside by 5:30 AM",
@@ -287,7 +310,7 @@ const DEFAULT_COLLECTION_SCHEDULE = [
   {
     id: "SCH-002",
     day: "Tuesday",
-    zone: "Zone 2 - Central Pateros",
+    zone: "Magtanggol",
     timeWindow: "6:00 AM - 10:00 AM",
     wasteType: "Non-biodegradable",
     notes: "Use clear bagging for recyclables",
@@ -295,7 +318,7 @@ const DEFAULT_COLLECTION_SCHEDULE = [
   {
     id: "SCH-003",
     day: "Wednesday",
-    zone: "Zone 3 - East Pateros",
+    zone: "Martires Del 96",
     timeWindow: "7:00 AM - 11:00 AM",
     wasteType: "Biodegradable",
     notes: "Segregate food waste separately",
@@ -303,7 +326,7 @@ const DEFAULT_COLLECTION_SCHEDULE = [
   {
     id: "SCH-004",
     day: "Thursday",
-    zone: "Zone 4 - Riverside",
+    zone: "Poblacion",
     timeWindow: "7:00 AM - 11:00 AM",
     wasteType: "Non-biodegradable",
     notes: "Flatten cardboard before disposal",
@@ -311,10 +334,50 @@ const DEFAULT_COLLECTION_SCHEDULE = [
   {
     id: "SCH-005",
     day: "Friday",
-    zone: "All Zones",
+    zone: "San Pedro",
     timeWindow: "8:00 AM - 12:00 PM",
     wasteType: "Special Collection",
     notes: "Bulk and bulky waste pickup",
+  },
+  {
+    id: "SCH-006",
+    day: "Monday",
+    zone: "San Roque",
+    timeWindow: "10:00 AM - 2:00 PM",
+    wasteType: "Biodegradable",
+    notes: "Keep biodegradable waste separated.",
+  },
+  {
+    id: "SCH-007",
+    day: "Tuesday",
+    zone: "Santa Ana",
+    timeWindow: "10:00 AM - 2:00 PM",
+    wasteType: "Non-biodegradable",
+    notes: "Secure bags before pickup.",
+  },
+  {
+    id: "SCH-008",
+    day: "Wednesday",
+    zone: "Santo Rosario-Kanluran",
+    timeWindow: "11:00 AM - 3:00 PM",
+    wasteType: "Biodegradable",
+    notes: "Place bins in accessible pickup points.",
+  },
+  {
+    id: "SCH-009",
+    day: "Thursday",
+    zone: "Santo Rosario-Silangan",
+    timeWindow: "11:00 AM - 3:00 PM",
+    wasteType: "Non-biodegradable",
+    notes: "Do not mix recyclable and residual waste.",
+  },
+  {
+    id: "SCH-010",
+    day: "Friday",
+    zone: "Tabacalera",
+    timeWindow: "1:00 PM - 4:00 PM",
+    wasteType: "Special Collection",
+    notes: "Bulk waste pickup by request or advisory.",
   },
 ];
 const DEFAULT_ANNOUNCEMENTS = [
@@ -565,10 +628,13 @@ function sanitizeReport(report) {
 }
 
 function sanitizeSchedule(item) {
+  const barangay = String(item.zone || item.barangay || "").trim();
+
   return {
     id: item.id,
     day: item.day,
-    zone: item.zone,
+    barangay,
+    zone: barangay,
     timeWindow: item.timeWindow,
     wasteType: item.wasteType,
     notes: item.notes,
@@ -2580,13 +2646,15 @@ function normalizeDriverPayload(payload = {}, options = {}) {
 
 function normalizeSchedulePayload(payload = {}) {
   const day = String(payload.day || "").trim();
-  const zone = String(payload.zone || "").trim();
+  const zone = normalizePaterosBarangay(payload.zone || payload.barangay);
   const timeWindow = String(payload.timeWindow || "").trim();
   const wasteType = String(payload.wasteType || "").trim();
   const notes = String(payload.notes || "").trim();
 
   if (!day || !zone || !timeWindow || !wasteType) {
-    return null;
+    return {
+      error: "day, barangay, timeWindow, and wasteType are required",
+    };
   }
 
   return {
@@ -2596,6 +2664,63 @@ function normalizeSchedulePayload(payload = {}) {
     wasteType,
     notes,
   };
+}
+
+function normalizePaterosBarangay(value) {
+  const normalized = String(value || "").trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  return PATEROS_BARANGAY_LOOKUP.get(normalized.toLowerCase()) || "";
+}
+
+async function syncOfficialPaterosSchedules() {
+  const existingSchedules = await schedulesCollection.find({}).sort({ id: 1 }).toArray();
+
+  if (existingSchedules.length === 0) {
+    await schedulesCollection.insertMany(DEFAULT_COLLECTION_SCHEDULE.map((item) => ({ ...item })));
+    return;
+  }
+
+  const onlyLegacyDefaults =
+    existingSchedules.length <= LEGACY_SCHEDULE_ZONES.length &&
+    existingSchedules.every((item) => LEGACY_SCHEDULE_ZONES.includes(String(item.zone || "").trim()));
+
+  if (onlyLegacyDefaults) {
+    await schedulesCollection.deleteMany({});
+    await schedulesCollection.insertMany(DEFAULT_COLLECTION_SCHEDULE.map((item) => ({ ...item })));
+    console.log("[schedule] Replaced legacy demo zones with the official Pateros barangay schedule.");
+    return;
+  }
+
+  const bulkUpdates = existingSchedules
+    .map((item) => {
+      const normalizedBarangay = normalizePaterosBarangay(item.zone || item.barangay);
+
+      if (!normalizedBarangay || normalizedBarangay === item.zone) {
+        return null;
+      }
+
+      return {
+        updateOne: {
+          filter: { _id: item._id },
+          update: {
+            $set: {
+              zone: normalizedBarangay,
+              updatedAt: new Date(),
+            },
+          },
+        },
+      };
+    })
+    .filter(Boolean);
+
+  if (bulkUpdates.length > 0) {
+    await schedulesCollection.bulkWrite(bulkUpdates);
+    console.log(`[schedule] Normalized ${bulkUpdates.length} schedule row(s) to official barangay names.`);
+  }
 }
 
 function normalizeFeedPayload(payload = {}) {
@@ -3077,10 +3202,7 @@ async function connectDatabase() {
     passwordResetCodesCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
 
-  const scheduleCount = await schedulesCollection.countDocuments();
-  if (scheduleCount === 0) {
-    await schedulesCollection.insertMany(DEFAULT_COLLECTION_SCHEDULE.map((item) => ({ ...item })));
-  }
+  await syncOfficialPaterosSchedules();
 
   const announcementsCount = await announcementsCollection.countDocuments();
   if (announcementsCount === 0) {
@@ -3394,9 +3516,9 @@ app.post(
   asyncRoute(async (req, res) => {
     const schedulePayload = normalizeSchedulePayload(req.body);
 
-    if (!schedulePayload) {
+    if (schedulePayload?.error) {
       res.status(400).json({
-        error: "day, zone, timeWindow, and wasteType are required",
+        error: schedulePayload.error,
       });
       return;
     }
@@ -3430,9 +3552,9 @@ app.put(
       return;
     }
 
-    if (!schedulePayload) {
+    if (schedulePayload?.error) {
       res.status(400).json({
-        error: "day, zone, timeWindow, and wasteType are required",
+        error: schedulePayload.error,
       });
       return;
     }

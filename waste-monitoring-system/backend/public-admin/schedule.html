@@ -30,7 +30,7 @@
           <div class="topbar-right">
             <label class="search-box">
               <span>Search</span>
-              <input id="searchInput" type="search" placeholder="Search day, zone, type" />
+              <input id="searchInput" type="search" placeholder="Search day, barangay, type" />
             </label>
             <button id="logoutButton" class="logout-button" type="button">Log out</button>
           </div>
@@ -58,8 +58,20 @@
                 <option>Sunday</option>
               </select>
 
-              <label for="scheduleZone">Zone</label>
-              <input id="scheduleZone" type="text" placeholder="Zone or barangay" required />
+              <label for="scheduleZone">Barangay</label>
+              <select id="scheduleZone" required>
+                <option value="">Select barangay</option>
+                <option>Aguho</option>
+                <option>Magtanggol</option>
+                <option>Martires Del 96</option>
+                <option>Poblacion</option>
+                <option>San Pedro</option>
+                <option>San Roque</option>
+                <option>Santa Ana</option>
+                <option>Santo Rosario-Kanluran</option>
+                <option>Santo Rosario-Silangan</option>
+                <option>Tabacalera</option>
+              </select>
 
               <label for="scheduleTimeWindow">Time Window</label>
               <input id="scheduleTimeWindow" type="text" placeholder="6:00 AM - 10:00 AM" required />
@@ -89,7 +101,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/admin/admin-pages.js?v=20260412e" defer></script>
+    <script src="/admin/admin-pages.js?v=20260515a" defer></script>
   </body>
 </html>
 
