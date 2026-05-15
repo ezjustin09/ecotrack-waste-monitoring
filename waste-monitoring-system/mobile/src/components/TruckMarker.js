@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Callout, Marker } from "react-native-maps";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Image, Platform } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { getTruckStatusMeta } from "../utils/truckStatus";
 
@@ -27,29 +27,67 @@ function TruckCallout({ truck, statusMeta }) {
 
 export default function TruckMarker({ truck, markerCoordinate, selected = false, onPress }) {
   const statusMeta = getTruckStatusMeta(truck.status);
+  const [tracksViewChanges, setTracksViewChanges] = useState(Platform.OS === "android");
   const coordinate = markerCoordinate || {
     latitude: truck.latitude,
     longitude: truck.longitude,
   };
 
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return undefined;
+    }
+
+    setTracksViewChanges(true);
+    const timeoutId = setTimeout(() => {
+      setTracksViewChanges(false);
+    }, 600);
+
+    return () => clearTimeout(timeoutId);
+  }, [coordinate.latitude, coordinate.longitude, selected]);
+
   return (
     <Marker
       coordinate={coordinate}
-      image={truckMarkerIcon}
       anchor={{ x: 0.5, y: 1 }}
-      centerOffset={{ x: 0, y: -25 }}
+      centerOffset={{ x: 0, y: -20 }}
       zIndex={selected ? 20 : 10}
-      tracksViewChanges={false}
+      tracksViewChanges={tracksViewChanges}
       onPress={() => onPress?.(truck)}
       title={truck.truckId}
       description={`${truck.status} | ${truck.latitude.toFixed(4)}, ${truck.longitude.toFixed(4)}`}
     >
+      <View style={styles.markerWrap}>
+        <Image
+          source={truckMarkerIcon}
+          style={selected ? styles.markerImageSelected : styles.markerImage}
+          resizeMode="contain"
+          fadeDuration={0}
+          onLoadEnd={() => {
+            if (Platform.OS === "android") {
+              setTracksViewChanges(false);
+            }
+          }}
+        />
+      </View>
       <TruckCallout truck={truck} statusMeta={statusMeta} />
     </Marker>
   );
 }
 
 const styles = StyleSheet.create({
+  markerWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  markerImage: {
+    width: 62,
+    height: 62,
+  },
+  markerImageSelected: {
+    width: 68,
+    height: 68,
+  },
   callout: {
     backgroundColor: "#ffffff",
     borderRadius: 18,
